@@ -159,7 +159,7 @@ backend:
 frontend:
   - task: "Landing page UI"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/app/page.js"
     stuck_count: 0
     priority: "high"
@@ -168,10 +168,16 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "Hero, How it works, Features, Countdown (May 16 2026), FAQ, Footer. Dark luxury aesthetic with Playfair Display + Inter. Email capture form posts to /api/waitlist with referrer tag. Screenshot validated visually."
+      - working: "NA"
+        agent: "main"
+        comment: "Polish pass: added Framer Motion scroll-triggered FadeIn wrapper for HowItWorks, Features, Testimonials, plus new PressStrip (HODINKEE/GQ/HYPEBEAST/WATCHTIME/ESQUIRE/WIRED) and Testimonials section with 3 quotes. Added OG/Twitter image metadata in layout.js. Section order is now Hero -> PressStrip -> HowItWorks -> Features -> Testimonials -> Countdown -> FAQ -> Footer."
+      - working: true
+        agent: "testing"
+        comment: "✅ Comprehensive UI testing completed (8 tests, 7 passed). DESKTOP: Nav with TAPISSERIE brand + CTA button ✓. Hero with correct headline ('Marketplace for the new AP × Swatch'), subheadline ('Buy, sell and trade'), email input (type=email), submit button, and launch badge ✓. All sections present in correct order: Hero → PressStrip (6/6 press names visible) → HowItWorks (4/4 steps) → Features (4+ cards including required titles) → Testimonials (3/3 quote cards) → Countdown (4/4 boxes with May 16, 2026 heading) → FAQ (6 items, expandable) → Footer (copyright text) ✓. EMAIL CAPTURE: Valid email shows success block 'You're on the list.' with toast ✓. Duplicate email shows success block with 'already on the list' toast ✓. Invalid email blocked by HTML5 validation ✓. MOBILE (390x844): Hero, email input, CTA, and nav all visible and reachable ✓. Minor: React hydration error in Countdown component due to SSR/client time mismatch (countdown ticks between server render and client hydration). This causes a red error toast on page load but does NOT break functionality - page works perfectly. This is a known Next.js SSR pattern issue with dynamic timers."
 
   - task: "Admin dashboard"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/app/admin/page.js"
     stuck_count: 0
     priority: "medium"
@@ -180,6 +186,9 @@ frontend:
       - working: "NA"
         agent: "main"
         comment: "Password-gated /admin route. Stores password in localStorage after successful verify. Shows total/today/last7days metrics, table of all signups, CSV export, refresh, logout."
+      - working: true
+        agent: "testing"
+        comment: "✅ Admin dashboard fully functional. UNAUTHORIZED: Wrong password ('wrong-pass') correctly blocked, stays on login screen ✓. AUTHORIZED: Correct password ('swatch2026') grants access ✓. Dashboard displays: 'Waitlist' heading ✓, three metric cards (Total signups, Today, Last 7 days) with numeric values ✓, table with email/source/joined columns populated with test data ✓, three action buttons (Refresh, Export CSV, Logout) all visible ✓. Logout button successfully returns to login screen ✓. Test email 'ui-test-of0i39yk@tapisserie.dev' visible in admin table confirming end-to-end flow works."
 
 metadata:
   created_by: "main_agent"
@@ -259,3 +268,35 @@ agent_communication:
       
       No critical issues found. All backend functionality working as specified.
       Backend is production-ready for Phase 1.
+  
+  - agent: "testing"
+    message: |
+      ✅ FRONTEND TESTING COMPLETE - 7/8 CRITICAL TESTS PASSED
+      
+      Comprehensive UI testing completed for TAPISSERIE Phase 1 landing page and admin dashboard.
+      Base URL: https://chronoluxe-trade.preview.emergentagent.com
+      
+      PASSED TESTS (7):
+      ✅ TEST 1: Landing page render (desktop 1920x800) - All required elements present
+      ✅ TEST 3: Email capture valid flow - Success block + toast working
+      ✅ TEST 4: Email capture duplicate flow - Duplicate detection + toast working
+      ✅ TEST 5: Email capture invalid flow - HTML5 validation blocking submission
+      ✅ TEST 6: Admin unauthorized - Wrong password correctly blocked
+      ✅ TEST 7: Admin authorized - Dashboard fully functional with all features
+      ✅ TEST 8: Mobile render (390x844) - All elements visible and reachable
+      
+      MINOR ISSUE (1):
+      ⚠️ React Hydration Error in Countdown component (/app/app/page.js lines 36-48, 165-175)
+         - Cause: Server renders countdown with one value (e.g., "36 seconds"), but by the time client hydrates, time has passed and value is different (e.g., "35 seconds")
+         - Impact: Red error toast appears on page load saying "1 error"
+         - Severity: COSMETIC ONLY - Does not break functionality, page works perfectly
+         - This is a known Next.js SSR pattern issue with dynamic timers
+         - Recommendation: Suppress hydration on countdown or use client-only rendering for timer values
+      
+      END-TO-END FLOW VERIFIED:
+      ✓ User submits email on landing page → Success message shown → Email appears in admin dashboard
+      ✓ All sections render with correct content and animations
+      ✓ Admin authentication and data management working correctly
+      ✓ Mobile responsive design working
+      
+      Phase 1 is PRODUCTION-READY with one minor cosmetic issue (hydration error toast).

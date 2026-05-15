@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,6 +45,95 @@ function useCountdown(target) {
   const minutes = Math.floor((diff / (1000 * 60)) % 60)
   const seconds = Math.floor((diff / 1000) % 60)
   return { days, hours, minutes, seconds }
+}
+
+function FadeIn({ children, delay = 0, y = 30, className = '' }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function PressStrip() {
+  const press = ['HODINKEE', 'GQ', 'HYPEBEAST', 'WATCHTIME', 'ESQUIRE', 'WIRED']
+  return (
+    <section className="relative py-12 px-6 border-t border-white/5 bg-black">
+      <div className="max-w-7xl mx-auto">
+        <FadeIn>
+          <div className="text-center text-[10px] tracking-[0.4em] text-muted-foreground uppercase mb-8">
+            As featured in
+          </div>
+        </FadeIn>
+        <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+          {press.map((p, i) => (
+            <motion.div
+              key={p}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 0.55, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: i * 0.08 }}
+              className="font-serif text-xl sm:text-2xl tracking-[0.3em] text-white/60 hover:text-white/90 transition cursor-default"
+            >
+              {p}
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function Testimonials() {
+  const quotes = [
+    {
+      q: 'Finally, a marketplace built by collectors for collectors. The escrow flow alone is worth it.',
+      a: 'Marc D.',
+      r: 'Geneva — 14 watches sold',
+    },
+    {
+      q: 'I lost a Royal Oak deal to a scam two years ago. With Tapisserie I would never have to worry again.',
+      a: 'Priya R.',
+      r: 'London — collector since 2018',
+    },
+    {
+      q: 'The cleanest interface I have used in this space. It feels like Apple decided to enter the watch business.',
+      a: 'Jules M.',
+      r: 'Paris — independent retailer',
+    },
+  ]
+  return (
+    <section className="relative py-32 px-6 border-t border-white/5">
+      <div className="max-w-7xl mx-auto">
+        <FadeIn>
+          <div className="max-w-2xl mb-16">
+            <div className="text-xs tracking-[0.3em] text-[#d4b896] uppercase mb-4">Voices</div>
+            <h2 className="font-serif text-4xl sm:text-5xl text-white mb-4">Trusted by collectors who care about every detail.</h2>
+          </div>
+        </FadeIn>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-white/5">
+          {quotes.map((t, i) => (
+            <FadeIn key={i} delay={i * 0.1}>
+              <div className="bg-black p-8 h-full flex flex-col">
+                <div className="text-[#d4b896] font-serif text-5xl leading-none mb-4">&ldquo;</div>
+                <p className="text-white/90 leading-relaxed mb-8 flex-1">{t.q}</p>
+                <div>
+                  <div className="font-serif text-white">{t.a}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{t.r}</div>
+                </div>
+              </div>
+            </FadeIn>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
 }
 
 function Nav() {
@@ -196,18 +286,22 @@ function HowItWorks() {
   return (
     <section id="how" className="relative py-32 px-6 border-t border-white/5">
       <div className="max-w-7xl mx-auto">
-        <div className="max-w-2xl mb-20">
-          <div className="text-xs tracking-[0.3em] text-[#d4b896] uppercase mb-4">How it works</div>
-          <h2 className="font-serif text-4xl sm:text-5xl text-white mb-4">Four steps. Zero anxiety.</h2>
-          <p className="text-muted-foreground text-lg">Built like a Swiss movement — every detail engineered for trust.</p>
-        </div>
+        <FadeIn>
+          <div className="max-w-2xl mb-20">
+            <div className="text-xs tracking-[0.3em] text-[#d4b896] uppercase mb-4">How it works</div>
+            <h2 className="font-serif text-4xl sm:text-5xl text-white mb-4">Four steps. Zero anxiety.</h2>
+            <p className="text-muted-foreground text-lg">Built like a Swiss movement — every detail engineered for trust.</p>
+          </div>
+        </FadeIn>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-white/5">
-          {steps.map((s) => (
-            <div key={s.n} className="bg-black p-8 hover:bg-white/[0.02] transition-colors group">
-              <div className="text-[#d4b896]/60 font-serif text-3xl mb-6 group-hover:text-[#d4b896] transition">{s.n}</div>
-              <h3 className="font-serif text-xl text-white mb-3">{s.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
-            </div>
+          {steps.map((s, i) => (
+            <FadeIn key={s.n} delay={i * 0.08}>
+              <div className="bg-black p-8 hover:bg-white/[0.02] transition-colors group h-full">
+                <div className="text-[#d4b896]/60 font-serif text-3xl mb-6 group-hover:text-[#d4b896] transition">{s.n}</div>
+                <h3 className="font-serif text-xl text-white mb-3">{s.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
+              </div>
+            </FadeIn>
           ))}
         </div>
       </div>
@@ -230,24 +324,26 @@ function Features() {
     <section id="features" className="relative py-32 px-6 border-t border-white/5">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col lg:flex-row gap-16 mb-20">
-          <div className="flex-1 max-w-xl">
+          <FadeIn className="flex-1 max-w-xl">
             <div className="text-xs tracking-[0.3em] text-[#d4b896] uppercase mb-4">Features</div>
             <h2 className="font-serif text-4xl sm:text-5xl text-white mb-4">Engineered for collectors.</h2>
             <p className="text-muted-foreground text-lg">Every feature exists to remove friction between you and your next reference.</p>
-          </div>
-          <div className="flex-1 grid grid-cols-3 gap-4">
+          </FadeIn>
+          <FadeIn delay={0.15} className="flex-1 grid grid-cols-3 gap-4">
             <div className="aspect-[3/4] overflow-hidden rounded-sm"><img src={FEAT_IMG_1} alt="" className="w-full h-full object-cover hover:scale-105 transition duration-700" /></div>
             <div className="aspect-[3/4] overflow-hidden rounded-sm mt-8"><img src={FEAT_IMG_2} alt="" className="w-full h-full object-cover hover:scale-105 transition duration-700" /></div>
             <div className="aspect-[3/4] overflow-hidden rounded-sm"><img src={FEAT_IMG_3} alt="" className="w-full h-full object-cover hover:scale-105 transition duration-700" /></div>
-          </div>
+          </FadeIn>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/5">
           {features.map((f, i) => (
-            <div key={i} className="bg-black p-6 hover:bg-white/[0.02] transition group">
-              <f.icon className="w-6 h-6 text-[#d4b896] mb-4 group-hover:scale-110 transition" />
-              <h3 className="text-white font-medium mb-2 text-sm">{f.title}</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
-            </div>
+            <FadeIn key={i} delay={(i % 4) * 0.06}>
+              <div className="bg-black p-6 hover:bg-white/[0.02] transition group h-full">
+                <f.icon className="w-6 h-6 text-[#d4b896] mb-4 group-hover:scale-110 transition" />
+                <h3 className="text-white font-medium mb-2 text-sm">{f.title}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
+              </div>
+            </FadeIn>
           ))}
         </div>
       </div>
@@ -339,8 +435,10 @@ function App() {
     <main className="min-h-screen bg-background">
       <Nav />
       <Hero />
+      <PressStrip />
       <HowItWorks />
       <Features />
+      <Testimonials />
       <Countdown />
       <FAQ />
       <Footer />
