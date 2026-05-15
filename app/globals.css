@@ -1,0 +1,89 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 30 10% 95%;
+    --card: 0 0% 6%;
+    --card-foreground: 30 10% 95%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 30 10% 95%;
+    --primary: 36 35% 70%;
+    --primary-foreground: 0 0% 5%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 30 10% 95%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 30 5% 60%;
+    --accent: 36 35% 70%;
+    --accent-foreground: 0 0% 5%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14%;
+    --input: 0 0% 12%;
+    --ring: 36 35% 70%;
+    --radius: 0.25rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #0a0a0a;
+  }
+  .font-serif {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+@layer utilities {
+  .gold-gradient {
+    background: linear-gradient(135deg, #d4b896 0%, #b89968 50%, #d4b896 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .gold-border {
+    border-image: linear-gradient(135deg, #d4b896 0%, #b89968 50%, #d4b896 100%) 1;
+  }
+  .noise-bg {
+    background-image: radial-gradient(circle at 50% 0%, rgba(212, 184, 150, 0.08), transparent 50%);
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(212, 184, 150, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(212, 184, 150, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-fade-up {
+    animation: fade-up 0.8s ease-out forwards;
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .shimmer {
+    background: linear-gradient(90deg, transparent, rgba(212, 184, 150, 0.15), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
