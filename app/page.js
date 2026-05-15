@@ -151,9 +151,12 @@ function Nav() {
         </div>
         <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
           <a href="#how" className="hover:text-white transition">How it works</a>
+          <a href="#references" className="hover:text-white transition">Collection</a>
           <a href="#features" className="hover:text-white transition">Features</a>
           <a href="#countdown" className="hover:text-white transition">Drop</a>
           <a href="#faq" className="hover:text-white transition">FAQ</a>
+          <a href="/listings" className="hover:text-white transition">Browse</a>
+          <a href="/login" className="hover:text-white transition">Sign in</a>
         </div>
         <a href="#cta">
           <Button size="sm" className="bg-[#d4b896] hover:bg-[#c5a87f] text-black font-medium rounded-sm">
@@ -433,18 +436,127 @@ function Footer() {
   )
 }
 
+function FeaturedRefs() {
+  const refs = [
+    { name: 'AP × Swatch Mission to Le Brassus', code: 'APXS-01', img: HERO_IMG, color: 'Onyx Bioceramic' },
+    { name: 'AP × Swatch Geneva', code: 'APXS-02', img: FEAT_IMG_1, color: 'Lake Léman Blue' },
+    { name: 'AP × Swatch Sahara', code: 'APXS-03', img: FEAT_IMG_2, color: 'Desert Tan' },
+    { name: 'AP × Swatch Forêt', code: 'APXS-04', img: FEAT_IMG_3, color: 'Vallée Green' },
+    { name: 'AP × Swatch Glacier', code: 'APXS-05', img: HERO_IMG, color: 'Arctic White' },
+    { name: 'AP × Swatch Midnight', code: 'APXS-06', img: FEAT_IMG_2, color: 'Galaxy Black' },
+  ]
+  return (
+    <section id="references" className="relative py-32 px-6 border-t border-white/5">
+      <div className="max-w-7xl mx-auto">
+        <FadeIn>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-12">
+            <div className="max-w-xl">
+              <div className="text-xs tracking-[0.3em] text-[#d4b896] uppercase mb-4">The collection</div>
+              <h2 className="font-serif text-4xl sm:text-5xl text-white mb-4">Six references. One drop.</h2>
+              <p className="text-muted-foreground text-lg">
+                A first look at the AP × Swatch references making their debut on May 16. Browse, watchlist, and prepare your offer.
+              </p>
+            </div>
+            <a href="#cta" className="text-sm text-[#d4b896] hover:text-white transition tracking-wide">
+              Reserve early access →
+            </a>
+          </div>
+        </FadeIn>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-white/5">
+          {refs.map((r, i) => (
+            <FadeIn key={r.code} delay={(i % 3) * 0.08}>
+              <div className="bg-black group cursor-pointer h-full">
+                <div className="aspect-square overflow-hidden bg-neutral-950 relative">
+                  <img src={r.img} alt={r.name} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition duration-700" />
+                  <div className="absolute top-3 left-3 px-2 py-1 bg-black/60 backdrop-blur border border-white/10 text-[10px] tracking-[0.2em] text-white/80 uppercase rounded-sm">
+                    {r.code}
+                  </div>
+                </div>
+                <div className="p-5">
+                  <div className="font-serif text-white text-lg leading-tight mb-1">{r.name}</div>
+                  <div className="text-xs text-muted-foreground">{r.color}</div>
+                </div>
+              </div>
+            </FadeIn>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function StickyCTA({ visible }) {
+  return (
+    <div
+      className={`fixed bottom-0 inset-x-0 z-40 transition-all duration-500 ${
+        visible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
+      }`}
+    >
+      <div className="bg-black/85 backdrop-blur-md border-t border-[#d4b896]/30">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Sparkles className="w-4 h-4 text-[#d4b896] flex-shrink-0" />
+            <p className="text-xs sm:text-sm text-white/90 truncate">
+              <span className="hidden sm:inline">The drop is approaching. </span>
+              Lock in early access — reduced fees on your first sale.
+            </p>
+          </div>
+          <a href="#cta" className="flex-shrink-0">
+            <Button size="sm" className="bg-[#d4b896] hover:bg-[#c5a87f] text-black font-medium rounded-sm whitespace-nowrap">
+              Get Access
+            </Button>
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
+  const [showSticky, setShowSticky] = useState(false)
+
+  useEffect(() => {
+    // pageview beacon (fire-and-forget)
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'pageview', path: '/' }),
+    }).catch(() => {})
+
+    const onScroll = () => {
+      setShowSticky(window.scrollY > window.innerHeight * 0.9)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      { '@type': 'Question', name: 'When does the marketplace open?', acceptedAnswer: { '@type': 'Answer', text: 'TAPISSERIE opens on May 16, 2026 — the same day the AP × Swatch collection drops. Waitlist members get access first.' } },
+      { '@type': 'Question', name: 'What is escrow and why does it matter?', acceptedAnswer: { '@type': 'Answer', text: 'When a buyer pays, funds are held by TAPISSERIE — not the seller. The money only moves to the seller after the buyer confirms the watch arrived as described. This protects both sides.' } },
+      { '@type': 'Question', name: 'How much does it cost to sell?', acceptedAnswer: { '@type': 'Answer', text: 'A single, transparent marketplace fee. No listing fees, no surprises. Early waitlist members pay reduced fees on their first sale.' } },
+      { '@type': 'Question', name: 'Are sellers verified?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. Every seller goes through identity verification, and trusted sellers earn a verified badge based on completed sales and feedback.' } },
+      { '@type': 'Question', name: 'How is shipping calculated?', acceptedAnswer: { '@type': 'Answer', text: 'We calculate shipping cost based on the distance between buyer and seller using geolocation, so the price you see is the price you pay.' } },
+      { '@type': 'Question', name: 'Can I make offers like on Vinted or Grailed?', acceptedAnswer: { '@type': 'Answer', text: 'Absolutely. Send offers, counter-offers, and negotiate directly inside the chat with the seller. Buy Now is also one tap away.' } },
+    ],
+  }
+
   return (
     <main className="min-h-screen bg-background">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <Nav />
       <Hero />
       <PressStrip />
       <HowItWorks />
+      <FeaturedRefs />
       <Features />
       <Testimonials />
       <Countdown />
       <FAQ />
       <Footer />
+      <StickyCTA visible={showSticky} />
     </main>
   )
 }

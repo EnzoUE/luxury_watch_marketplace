@@ -1,608 +1,633 @@
 #!/usr/bin/env python3
 """
-Backend API tests for TAPISSERIE Phase 1
-Tests all backend endpoints in /app/app/api/[[...path]]/route.js
+TAPISSERIE Phase 2 Backend API Tests
+Tests all Phase 2 endpoints: events, auth (signup/login/logout/me), listings
 """
 
 import requests
-import json
-import sys
-from datetime import datetime
+import time
+import random
+import string
 
-# Configuration
 BASE_URL = "https://chronoluxe-trade.preview.emergentagent.com/api"
 ADMIN_PASSWORD = "swatch2026"
 
-# Test results tracking
-test_results = {
-    "passed": 0,
-    "failed": 0,
-    "errors": []
-}
+def random_nonce():
+    """Generate random string for unique test data"""
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
 
-def log_test(test_name, passed, details=""):
-    """Log test result"""
+def print_test(name, passed, details=""):
+    """Print test result"""
     status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"\n{status}: {test_name}")
+    print(f"{status}: {name}")
     if details:
-        print(f"  Details: {details}")
-    
-    if passed:
-        test_results["passed"] += 1
-    else:
-        test_results["failed"] += 1
-        test_results["errors"].append(f"{test_name}: {details}")
+        print(f"   {details}")
 
-def test_health_endpoint():
-    """Test GET /api/health"""
-    print("\n" + "="*80)
-    print("TEST: Health Endpoint")
-    print("="*80)
+def test_events():
+    """Test POST /api/events - pageview beacon"""
+    print("\n=== TEST 1: POST /api/events ===")
     
+    # Test 1a: Valid pageview event
     try:
-        response = requests.get(f"{BASE_URL}/health", timeout=10)
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("ok") == True:
-                log_test("GET /api/health returns 200 with ok:true", True)
-                return True
-            else:
-                log_test("GET /api/health returns 200 with ok:true", False, f"ok field is {data.get('ok')}")
-                return False
-        else:
-            log_test("GET /api/health returns 200", False, f"Got status {response.status_code}")
-            return False
+        resp = requests.post(f"{BASE_URL}/events", json={"type": "pageview", "path": "/"}, timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("ok") == True
+        print_test("Valid pageview event", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
     except Exception as e:
-        log_test("GET /api/health", False, f"Exception: {str(e)}")
-        return False
-
-def test_waitlist_valid_email():
-    """Test POST /api/waitlist with valid email"""
-    print("\n" + "="*80)
-    print("TEST: Waitlist - Valid Email")
-    print("="*80)
+        print_test("Valid pageview event", False, f"Error: {e}")
     
+    # Test 1b: Missing type (best-effort, should still work)
     try:
-        email = f"test+phase1+{datetime.now().timestamp()}@tapisserie.dev"
-        payload = {"email": email, "referrer": "test"}
-        
-        response = requests.post(
-            f"{BASE_URL}/waitlist",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        resp = requests.post(f"{BASE_URL}/events", json={}, timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("ok") == True
+        print_test("Missing type (best-effort)", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Missing type (best-effort)", False, f"Error: {e}")
+
+def test_auth_signup():
+    """Test POST /api/auth/signup with extensive validation"""
+    print("\n=== TEST 2: POST /api/auth/signup ===")
+    
+    nonce = random_nonce()
+    valid_email = f"bob+{nonce}@tap.test"
+    valid_username = f"bob_{nonce}"
+    valid_password = "royaloak2026"
+    
+    # Test 2a: Valid signup
+    session = requests.Session()
+    try:
+        resp = session.post(f"{BASE_URL}/auth/signup", json={
+            "email": valid_email,
+            "username": valid_username,
+            "password": valid_password
+        }, timeout=10)
+        data = resp.json()
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            "user" in data and
+            data["user"].get("email") == valid_email and
+            data["user"].get("username") == valid_username and
+            "passwordHash" not in data["user"] and
+            "_id" not in data["user"]
         )
-        
-        print(f"Email: {email}")
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            required_fields = ["ok", "duplicate", "position", "message"]
-            missing_fields = [f for f in required_fields if f not in data]
-            
-            if missing_fields:
-                log_test("POST /api/waitlist valid email - response structure", False, 
-                        f"Missing fields: {missing_fields}")
-                return False
-            
-            if data.get("ok") == True and data.get("duplicate") == False and isinstance(data.get("position"), int):
-                log_test("POST /api/waitlist with valid email", True, 
-                        f"Position: {data.get('position')}")
-                return email  # Return email for duplicate test
-            else:
-                log_test("POST /api/waitlist with valid email", False, 
-                        f"Unexpected response values: {data}")
-                return False
-        else:
-            log_test("POST /api/waitlist with valid email", False, 
-                    f"Expected 200, got {response.status_code}")
-            return False
+        # Check cookie
+        cookie_set = "tap_session" in session.cookies
+        print_test("Valid signup", passed and cookie_set, 
+                   f"Status: {resp.status_code}, User: {data.get('user', {}).get('username')}, Cookie: {cookie_set}")
     except Exception as e:
-        log_test("POST /api/waitlist with valid email", False, f"Exception: {str(e)}")
-        return False
-
-def test_waitlist_duplicate_email(email):
-    """Test POST /api/waitlist with duplicate email"""
-    print("\n" + "="*80)
-    print("TEST: Waitlist - Duplicate Email")
-    print("="*80)
+        print_test("Valid signup", False, f"Error: {e}")
     
+    # Test 2b: Duplicate email
     try:
-        payload = {"email": email}
-        
-        response = requests.post(
-            f"{BASE_URL}/waitlist",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        resp = requests.post(f"{BASE_URL}/auth/signup", json={
+            "email": valid_email,
+            "username": f"different_{nonce}",
+            "password": valid_password
+        }, timeout=10)
+        passed = resp.status_code == 409 and "error" in resp.json()
+        print_test("Duplicate email rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Duplicate email rejection", False, f"Error: {e}")
+    
+    # Test 2c: Duplicate username
+    try:
+        resp = requests.post(f"{BASE_URL}/auth/signup", json={
+            "email": f"different+{nonce}@tap.test",
+            "username": valid_username,
+            "password": valid_password
+        }, timeout=10)
+        passed = resp.status_code == 409 and "error" in resp.json()
+        print_test("Duplicate username rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Duplicate username rejection", False, f"Error: {e}")
+    
+    # Test 2d: Invalid email
+    try:
+        resp = requests.post(f"{BASE_URL}/auth/signup", json={
+            "email": "abc",
+            "username": f"test_{nonce}",
+            "password": valid_password
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Invalid email rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Invalid email rejection", False, f"Error: {e}")
+    
+    # Test 2e: Short password
+    try:
+        resp = requests.post(f"{BASE_URL}/auth/signup", json={
+            "email": f"short+{nonce}@tap.test",
+            "username": f"short_{nonce}",
+            "password": "short"
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Short password rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Short password rejection", False, f"Error: {e}")
+    
+    # Test 2f: Short username
+    try:
+        resp = requests.post(f"{BASE_URL}/auth/signup", json={
+            "email": f"shortuser+{nonce}@tap.test",
+            "username": "ab",
+            "password": valid_password
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Short username rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Short username rejection", False, f"Error: {e}")
+    
+    # Test 2g: Username normalization
+    try:
+        nonce2 = random_nonce()
+        resp = requests.post(f"{BASE_URL}/auth/signup", json={
+            "email": f"normalize+{nonce2}@tap.test",
+            "username": "Bob Smith!",
+            "password": valid_password
+        }, timeout=10)
+        data = resp.json()
+        # Should normalize to "bobsmith" (lowercase, strip non-[a-z0-9_])
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            data.get("user", {}).get("username") == "bobsmith"
         )
-        
-        print(f"Email: {email}")
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("ok") == True and data.get("duplicate") == True:
-                log_test("POST /api/waitlist with duplicate email", True)
-                return True
-            else:
-                log_test("POST /api/waitlist with duplicate email", False, 
-                        f"Expected duplicate:true, got {data}")
-                return False
-        else:
-            log_test("POST /api/waitlist with duplicate email", False, 
-                    f"Expected 200, got {response.status_code}")
-            return False
+        print_test("Username normalization", passed, 
+                   f"Status: {resp.status_code}, Normalized username: {data.get('user', {}).get('username')}")
     except Exception as e:
-        log_test("POST /api/waitlist with duplicate email", False, f"Exception: {str(e)}")
-        return False
-
-def test_waitlist_email_normalization():
-    """Test email normalization (whitespace + case)"""
-    print("\n" + "="*80)
-    print("TEST: Waitlist - Email Normalization")
-    print("="*80)
+        print_test("Username normalization", False, f"Error: {e}")
     
+    return session, valid_email, valid_username, valid_password
+
+def test_me(session_with_cookie, session_without_cookie):
+    """Test GET /api/me"""
+    print("\n=== TEST 3: GET /api/me ===")
+    
+    # Test 3a: Without cookie
     try:
-        # First, submit with whitespace and uppercase
-        timestamp = datetime.now().timestamp()
-        email_unnormalized = f"  Test+Normalize+{timestamp}@BAR.com "
-        email_normalized = f"test+normalize+{timestamp}@bar.com"
-        
-        payload1 = {"email": email_unnormalized}
-        response1 = requests.post(
-            f"{BASE_URL}/waitlist",
-            json=payload1,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        resp = session_without_cookie.get(f"{BASE_URL}/me", timeout=10)
+        data = resp.json()
+        passed = resp.status_code == 200 and data.get("user") is None
+        print_test("GET /me without cookie", passed, f"Status: {resp.status_code}, User: {data.get('user')}")
+    except Exception as e:
+        print_test("GET /me without cookie", False, f"Error: {e}")
+    
+    # Test 3b: With session cookie
+    try:
+        resp = session_with_cookie.get(f"{BASE_URL}/me", timeout=10)
+        data = resp.json()
+        passed = (
+            resp.status_code == 200 and
+            data.get("user") is not None and
+            "passwordHash" not in data.get("user", {}) and
+            "_id" not in data.get("user", {})
         )
-        
-        print(f"First submission: '{email_unnormalized}'")
-        print(f"Status Code: {response1.status_code}")
-        print(f"Response: {response1.text}")
-        
-        if response1.status_code != 200:
-            log_test("Email normalization - first submission", False, 
-                    f"Expected 200, got {response1.status_code}")
-            return False
-        
-        data1 = response1.json()
-        if data1.get("duplicate") == True:
-            log_test("Email normalization - first submission", False, 
-                    "First submission marked as duplicate")
-            return False
-        
-        # Now submit the normalized version - should be duplicate
-        payload2 = {"email": email_normalized}
-        response2 = requests.post(
-            f"{BASE_URL}/waitlist",
-            json=payload2,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        print_test("GET /me with cookie", passed, 
+                   f"Status: {resp.status_code}, Username: {data.get('user', {}).get('username')}")
+    except Exception as e:
+        print_test("GET /me with cookie", False, f"Error: {e}")
+
+def test_login(email, username, password):
+    """Test POST /api/auth/login"""
+    print("\n=== TEST 4: POST /api/auth/login ===")
+    
+    # Test 4a: Correct credentials
+    session = requests.Session()
+    try:
+        resp = session.post(f"{BASE_URL}/auth/login", json={
+            "email": email,
+            "password": password
+        }, timeout=10)
+        data = resp.json()
+        cookie_set = "tap_session" in session.cookies
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            "user" in data and
+            cookie_set
         )
-        
-        print(f"\nSecond submission: '{email_normalized}'")
-        print(f"Status Code: {response2.status_code}")
-        print(f"Response: {response2.text}")
-        
-        if response2.status_code == 200:
-            data2 = response2.json()
-            if data2.get("ok") == True and data2.get("duplicate") == True:
-                log_test("Email normalization (whitespace + case)", True)
-                return True
-            else:
-                log_test("Email normalization (whitespace + case)", False, 
-                        f"Expected duplicate:true, got {data2}")
-                return False
-        else:
-            log_test("Email normalization (whitespace + case)", False, 
-                    f"Expected 200, got {response2.status_code}")
-            return False
+        print_test("Login with correct credentials", passed, 
+                   f"Status: {resp.status_code}, User: {data.get('user', {}).get('username')}, Cookie: {cookie_set}")
     except Exception as e:
-        log_test("Email normalization", False, f"Exception: {str(e)}")
-        return False
-
-def test_waitlist_invalid_email():
-    """Test POST /api/waitlist with invalid email"""
-    print("\n" + "="*80)
-    print("TEST: Waitlist - Invalid Email")
-    print("="*80)
+        print_test("Login with correct credentials", False, f"Error: {e}")
     
+    # Test 4b: Wrong password
     try:
-        payload = {"email": "not-an-email"}
-        
-        response = requests.post(
-            f"{BASE_URL}/waitlist",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        resp = requests.post(f"{BASE_URL}/auth/login", json={
+            "email": email,
+            "password": "wrongpassword123"
+        }, timeout=10)
+        passed = resp.status_code == 401 and "error" in resp.json()
+        print_test("Login with wrong password", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Login with wrong password", False, f"Error: {e}")
+    
+    # Test 4c: Unknown email
+    try:
+        resp = requests.post(f"{BASE_URL}/auth/login", json={
+            "email": f"unknown_{random_nonce()}@tap.test",
+            "password": password
+        }, timeout=10)
+        passed = resp.status_code == 401 and "error" in resp.json()
+        print_test("Login with unknown email", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Login with unknown email", False, f"Error: {e}")
+    
+    # Test 4d: Missing fields
+    try:
+        resp = requests.post(f"{BASE_URL}/auth/login", json={}, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Login with missing fields", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Login with missing fields", False, f"Error: {e}")
+    
+    return session
+
+def test_logout(session):
+    """Test POST /api/auth/logout"""
+    print("\n=== TEST 5: POST /api/auth/logout ===")
+    
+    # Test 5a: Logout
+    try:
+        resp = session.post(f"{BASE_URL}/auth/logout", timeout=10)
+        passed = resp.status_code == 200 and resp.json().get("ok") == True
+        print_test("Logout", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Logout", False, f"Error: {e}")
+    
+    # Test 5b: Verify /me returns null after logout
+    try:
+        resp = session.get(f"{BASE_URL}/me", timeout=10)
+        data = resp.json()
+        passed = resp.status_code == 200 and data.get("user") is None
+        print_test("GET /me after logout returns null", passed, f"Status: {resp.status_code}, User: {data.get('user')}")
+    except Exception as e:
+        print_test("GET /me after logout returns null", False, f"Error: {e}")
+
+def test_listings_create(session_with_auth, session_without_auth):
+    """Test POST /api/listings"""
+    print("\n=== TEST 6: POST /api/listings ===")
+    
+    # Test 6a: Without cookie (unauthorized)
+    try:
+        resp = session_without_auth.post(f"{BASE_URL}/listings", json={
+            "title": "Test Listing",
+            "price": 1000
+        }, timeout=10)
+        passed = resp.status_code == 401 and "error" in resp.json()
+        print_test("Create listing without auth", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Create listing without auth", False, f"Error: {e}")
+    
+    # Test 6b: Valid listing with all fields
+    listing_id = None
+    try:
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "AP × Swatch Mission to Le Brassus",
+            "price": 4850,
+            "description": "Sealed",
+            "collection": "Bioceramic Royal Oak",
+            "reference": "APXS-01",
+            "year": 2026,
+            "condition": "New",
+            "location": "Paris, France",
+            "boxIncluded": True,
+            "papersIncluded": True,
+            "images": ["https://example.com/img.jpg", "https://example.com/img2.jpg"]
+        }, timeout=10)
+        data = resp.json()
+        listing_id = data.get("listing", {}).get("id")
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            "listing" in data and
+            data["listing"].get("title") == "AP × Swatch Mission to Le Brassus" and
+            data["listing"].get("price") == 4850 and
+            data["listing"].get("currency") == "EUR" and
+            data["listing"].get("status") == "active" and
+            "sellerUsername" in data["listing"] and
+            "createdAt" in data["listing"]
         )
-        
-        print(f"Email: not-an-email")
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 400:
-            data = response.json()
-            if "error" in data:
-                log_test("POST /api/waitlist with invalid email returns 400", True)
-                return True
-            else:
-                log_test("POST /api/waitlist with invalid email", False, 
-                        "400 status but no error field in response")
-                return False
-        else:
-            log_test("POST /api/waitlist with invalid email", False, 
-                    f"Expected 400, got {response.status_code}")
-            return False
+        print_test("Create valid listing", passed, 
+                   f"Status: {resp.status_code}, Listing ID: {listing_id}, Price: {data.get('listing', {}).get('price')}")
     except Exception as e:
-        log_test("POST /api/waitlist with invalid email", False, f"Exception: {str(e)}")
-        return False
-
-def test_waitlist_missing_email():
-    """Test POST /api/waitlist with missing email"""
-    print("\n" + "="*80)
-    print("TEST: Waitlist - Missing Email")
-    print("="*80)
+        print_test("Create valid listing", False, f"Error: {e}")
     
+    # Test 6c: Missing title
     try:
-        payload = {}
-        
-        response = requests.post(
-            f"{BASE_URL}/waitlist",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "price": 1000
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Missing title rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Missing title rejection", False, f"Error: {e}")
+    
+    # Test 6d: Title too short
+    try:
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "AB",
+            "price": 1000
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Short title rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Short title rejection", False, f"Error: {e}")
+    
+    # Test 6e: Price zero
+    try:
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "Test Watch",
+            "price": 0
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Zero price rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Zero price rejection", False, f"Error: {e}")
+    
+    # Test 6f: Negative price
+    try:
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "Test Watch",
+            "price": -100
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Negative price rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Negative price rejection", False, f"Error: {e}")
+    
+    # Test 6g: Non-numeric price
+    try:
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "Test Watch",
+            "price": "not-a-number"
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Non-numeric price rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Non-numeric price rejection", False, f"Error: {e}")
+    
+    # Test 6h: More than 8 images (should only store 8)
+    try:
+        ten_images = [f"https://example.com/img{i}.jpg" for i in range(10)]
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "Test Watch with Many Images",
+            "price": 1000,
+            "images": ten_images
+        }, timeout=10)
+        data = resp.json()
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            len(data.get("listing", {}).get("images", [])) == 8
         )
-        
-        print(f"Payload: {payload}")
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 400:
-            data = response.json()
-            if "error" in data:
-                log_test("POST /api/waitlist with missing email returns 400", True)
-                return True
-            else:
-                log_test("POST /api/waitlist with missing email", False, 
-                        "400 status but no error field in response")
-                return False
-        else:
-            log_test("POST /api/waitlist with missing email", False, 
-                    f"Expected 400, got {response.status_code}")
-            return False
+        print_test("Max 8 images enforced", passed, 
+                   f"Status: {resp.status_code}, Images stored: {len(data.get('listing', {}).get('images', []))}")
     except Exception as e:
-        log_test("POST /api/waitlist with missing email", False, f"Exception: {str(e)}")
-        return False
-
-def test_waitlist_stats():
-    """Test GET /api/waitlist/stats"""
-    print("\n" + "="*80)
-    print("TEST: Waitlist Stats")
-    print("="*80)
+        print_test("Max 8 images enforced", False, f"Error: {e}")
     
+    # Test 6i: Non-http image URL filtered out
     try:
-        response = requests.get(f"{BASE_URL}/waitlist/stats", timeout=10)
-        
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("ok") == True and "count" in data and isinstance(data["count"], int):
-                log_test("GET /api/waitlist/stats", True, f"Count: {data['count']}")
-                return True
-            else:
-                log_test("GET /api/waitlist/stats", False, 
-                        f"Missing or invalid fields: {data}")
-                return False
-        else:
-            log_test("GET /api/waitlist/stats", False, 
-                    f"Expected 200, got {response.status_code}")
-            return False
-    except Exception as e:
-        log_test("GET /api/waitlist/stats", False, f"Exception: {str(e)}")
-        return False
-
-def test_admin_auth_valid():
-    """Test POST /api/admin/auth with valid password"""
-    print("\n" + "="*80)
-    print("TEST: Admin Auth - Valid Password")
-    print("="*80)
-    
-    try:
-        payload = {"password": ADMIN_PASSWORD}
-        
-        response = requests.post(
-            f"{BASE_URL}/admin/auth",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "Test Watch with FTP Image",
+            "price": 1000,
+            "images": ["https://example.com/good.jpg", "ftp://bad.com/img.jpg", "https://example.com/good2.jpg"]
+        }, timeout=10)
+        data = resp.json()
+        images = data.get("listing", {}).get("images", [])
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            len(images) == 2 and
+            all(img.startswith("http") for img in images)
         )
-        
-        print(f"Password: {ADMIN_PASSWORD}")
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("ok") == True:
-                log_test("POST /api/admin/auth with valid password", True)
-                return True
-            else:
-                log_test("POST /api/admin/auth with valid password", False, 
-                        f"ok field is {data.get('ok')}")
-                return False
-        else:
-            log_test("POST /api/admin/auth with valid password", False, 
-                    f"Expected 200, got {response.status_code}")
-            return False
+        print_test("Non-http URLs filtered", passed, 
+                   f"Status: {resp.status_code}, Images: {images}")
     except Exception as e:
-        log_test("POST /api/admin/auth with valid password", False, f"Exception: {str(e)}")
-        return False
-
-def test_admin_auth_invalid():
-    """Test POST /api/admin/auth with invalid password"""
-    print("\n" + "="*80)
-    print("TEST: Admin Auth - Invalid Password")
-    print("="*80)
+        print_test("Non-http URLs filtered", False, f"Error: {e}")
     
+    # Test 6j: Description truncated to 4000 chars
     try:
-        payload = {"password": "wrong"}
-        
-        response = requests.post(
-            f"{BASE_URL}/admin/auth",
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=10
+        long_desc = "A" * 5000
+        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
+            "title": "Test Watch with Long Description",
+            "price": 1000,
+            "description": long_desc
+        }, timeout=10)
+        data = resp.json()
+        desc_len = len(data.get("listing", {}).get("description", ""))
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            desc_len == 4000
         )
-        
-        print(f"Password: wrong")
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 401:
-            data = response.json()
-            if data.get("ok") == False:
-                log_test("POST /api/admin/auth with invalid password returns 401", True)
-                return True
-            else:
-                log_test("POST /api/admin/auth with invalid password", False, 
-                        f"ok field should be false, got {data.get('ok')}")
-                return False
-        else:
-            log_test("POST /api/admin/auth with invalid password", False, 
-                    f"Expected 401, got {response.status_code}")
-            return False
+        print_test("Description truncated to 4000 chars", passed, 
+                   f"Status: {resp.status_code}, Description length: {desc_len}")
     except Exception as e:
-        log_test("POST /api/admin/auth with invalid password", False, f"Exception: {str(e)}")
-        return False
-
-def test_admin_waitlist_no_auth():
-    """Test GET /api/admin/waitlist without authentication"""
-    print("\n" + "="*80)
-    print("TEST: Admin Waitlist - No Auth")
-    print("="*80)
+        print_test("Description truncated to 4000 chars", False, f"Error: {e}")
     
-    try:
-        response = requests.get(f"{BASE_URL}/admin/waitlist", timeout=10)
-        
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text}")
-        
-        if response.status_code == 401:
-            log_test("GET /api/admin/waitlist without auth returns 401", True)
-            return True
-        else:
-            log_test("GET /api/admin/waitlist without auth", False, 
-                    f"Expected 401, got {response.status_code}")
-            return False
-    except Exception as e:
-        log_test("GET /api/admin/waitlist without auth", False, f"Exception: {str(e)}")
-        return False
+    return listing_id
 
-def test_admin_waitlist_with_auth():
-    """Test GET /api/admin/waitlist with authentication"""
-    print("\n" + "="*80)
-    print("TEST: Admin Waitlist - With Auth")
-    print("="*80)
+def test_listings_list(listing_id):
+    """Test GET /api/listings"""
+    print("\n=== TEST 7: GET /api/listings ===")
     
+    # Test 7a: List all listings
     try:
-        headers = {"x-admin-password": ADMIN_PASSWORD}
-        
-        response = requests.get(
-            f"{BASE_URL}/admin/waitlist",
-            headers=headers,
-            timeout=10
+        resp = requests.get(f"{BASE_URL}/listings", timeout=10)
+        data = resp.json()
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            "items" in data and
+            isinstance(data["items"], list)
         )
-        
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text[:500]}...")  # Truncate long response
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Check required fields
-            if not (data.get("ok") == True and "count" in data and "items" in data):
-                log_test("GET /api/admin/waitlist with auth - response structure", False, 
-                        f"Missing required fields: {data.keys()}")
-                return False
-            
-            # Check items structure
+        print_test("List all listings", passed, 
+                   f"Status: {resp.status_code}, Count: {len(data.get('items', []))}")
+    except Exception as e:
+        print_test("List all listings", False, f"Error: {e}")
+    
+    # Test 7b: Verify newly created listing appears
+    if listing_id:
+        try:
+            resp = requests.get(f"{BASE_URL}/listings", timeout=10)
+            data = resp.json()
             items = data.get("items", [])
-            if len(items) > 0:
-                first_item = items[0]
-                print(f"\nFirst item fields: {first_item.keys()}")
-                
-                # Verify _id is NOT present
-                if "_id" in first_item:
-                    log_test("GET /api/admin/waitlist - items exclude _id", False, 
-                            "_id field found in items")
-                    return False
-                
-                # Verify expected fields are present
-                expected_fields = ["id", "email", "createdAt"]
-                missing = [f for f in expected_fields if f not in first_item]
-                if missing:
-                    log_test("GET /api/admin/waitlist - items structure", False, 
-                            f"Missing fields: {missing}")
-                    return False
-                
-                # Check sorting (createdAt descending)
-                if len(items) > 1:
-                    first_date = items[0].get("createdAt")
-                    second_date = items[1].get("createdAt")
-                    if first_date < second_date:
-                        log_test("GET /api/admin/waitlist - sorting", False, 
-                                "Items not sorted by createdAt descending")
-                        return False
-            
-            log_test("GET /api/admin/waitlist with auth", True, 
-                    f"Count: {data['count']}, Items: {len(items)}")
-            return True
-        else:
-            log_test("GET /api/admin/waitlist with auth", False, 
-                    f"Expected 200, got {response.status_code}")
-            return False
+            found = any(item.get("id") == listing_id for item in items)
+            passed = resp.status_code == 200 and found
+            print_test("Newly created listing appears in list", passed, 
+                       f"Status: {resp.status_code}, Found: {found}")
+        except Exception as e:
+            print_test("Newly created listing appears in list", False, f"Error: {e}")
+    
+    # Test 7c: Filter by query (case-insensitive)
+    try:
+        resp = requests.get(f"{BASE_URL}/listings?q=Brassus", timeout=10)
+        data = resp.json()
+        items = data.get("items", [])
+        # Should find "AP × Swatch Mission to Le Brassus"
+        found = any("brassus" in item.get("title", "").lower() or 
+                   "brassus" in item.get("collection", "").lower() for item in items)
+        passed = resp.status_code == 200 and data.get("ok") == True
+        print_test("Filter by query 'Brassus'", passed, 
+                   f"Status: {resp.status_code}, Results: {len(items)}, Found match: {found}")
     except Exception as e:
-        log_test("GET /api/admin/waitlist with auth", False, f"Exception: {str(e)}")
-        return False
+        print_test("Filter by query 'Brassus'", False, f"Error: {e}")
+    
+    # Test 7d: Non-existent query returns empty
+    try:
+        resp = requests.get(f"{BASE_URL}/listings?q=NONEXISTENT_ABC", timeout=10)
+        data = resp.json()
+        items = data.get("items", [])
+        passed = resp.status_code == 200 and data.get("ok") == True and len(items) == 0
+        print_test("Non-existent query returns empty", passed, 
+                   f"Status: {resp.status_code}, Results: {len(items)}")
+    except Exception as e:
+        print_test("Non-existent query returns empty", False, f"Error: {e}")
 
-def test_admin_export_no_auth():
-    """Test GET /api/admin/waitlist/export without password"""
-    print("\n" + "="*80)
-    print("TEST: Admin Export - No Auth")
-    print("="*80)
+def test_listings_detail(listing_id):
+    """Test GET /api/listings/{id}"""
+    print("\n=== TEST 8: GET /api/listings/{id} ===")
+    
+    # Test 8a: Existing listing
+    if listing_id:
+        try:
+            resp = requests.get(f"{BASE_URL}/listings/{listing_id}", timeout=10)
+            data = resp.json()
+            passed = (
+                resp.status_code == 200 and
+                data.get("ok") == True and
+                "listing" in data and
+                data["listing"].get("id") == listing_id and
+                "_id" not in data["listing"]
+            )
+            print_test("Get existing listing", passed, 
+                       f"Status: {resp.status_code}, Listing ID: {data.get('listing', {}).get('id')}")
+        except Exception as e:
+            print_test("Get existing listing", False, f"Error: {e}")
+    
+    # Test 8b: Non-existent listing
+    try:
+        fake_id = f"fake-{random_nonce()}"
+        resp = requests.get(f"{BASE_URL}/listings/{fake_id}", timeout=10)
+        passed = resp.status_code == 404 and "error" in resp.json()
+        print_test("Non-existent listing returns 404", passed, 
+                   f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Non-existent listing returns 404", False, f"Error: {e}")
+
+def test_waitlist_regression():
+    """Regression test for POST /api/waitlist"""
+    print("\n=== TEST 9: POST /api/waitlist (regression) ===")
+    
+    nonce = random_nonce()
+    
+    # Test 9a: Valid email
+    try:
+        resp = requests.post(f"{BASE_URL}/waitlist", json={
+            "email": f"regression+{nonce}@tap.test"
+        }, timeout=10)
+        data = resp.json()
+        passed = resp.status_code == 200 and data.get("ok") == True and data.get("duplicate") == False
+        print_test("Waitlist valid email", passed, f"Status: {resp.status_code}, Response: {data}")
+    except Exception as e:
+        print_test("Waitlist valid email", False, f"Error: {e}")
+    
+    # Test 9b: Duplicate
+    try:
+        resp = requests.post(f"{BASE_URL}/waitlist", json={
+            "email": f"regression+{nonce}@tap.test"
+        }, timeout=10)
+        data = resp.json()
+        passed = resp.status_code == 200 and data.get("ok") == True and data.get("duplicate") == True
+        print_test("Waitlist duplicate detection", passed, f"Status: {resp.status_code}, Response: {data}")
+    except Exception as e:
+        print_test("Waitlist duplicate detection", False, f"Error: {e}")
+    
+    # Test 9c: Invalid email
+    try:
+        resp = requests.post(f"{BASE_URL}/waitlist", json={
+            "email": "invalid-email"
+        }, timeout=10)
+        passed = resp.status_code == 400 and "error" in resp.json()
+        print_test("Waitlist invalid email", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+    except Exception as e:
+        print_test("Waitlist invalid email", False, f"Error: {e}")
+
+def test_admin_waitlist_counters():
+    """Test GET /api/admin/waitlist includes new counters"""
+    print("\n=== TEST 10: GET /api/admin/waitlist (with counters) ===")
     
     try:
-        response = requests.get(f"{BASE_URL}/admin/waitlist/export", timeout=10)
-        
-        print(f"Status Code: {response.status_code}")
-        print(f"Response: {response.text[:200]}...")
-        
-        if response.status_code == 401:
-            log_test("GET /api/admin/waitlist/export without password returns 401", True)
-            return True
-        else:
-            log_test("GET /api/admin/waitlist/export without password", False, 
-                    f"Expected 401, got {response.status_code}")
-            return False
-    except Exception as e:
-        log_test("GET /api/admin/waitlist/export without password", False, f"Exception: {str(e)}")
-        return False
-
-def test_admin_export_with_auth():
-    """Test GET /api/admin/waitlist/export with password"""
-    print("\n" + "="*80)
-    print("TEST: Admin Export - With Auth")
-    print("="*80)
-    
-    try:
-        response = requests.get(
-            f"{BASE_URL}/admin/waitlist/export?password={ADMIN_PASSWORD}",
-            timeout=10
+        resp = requests.get(f"{BASE_URL}/admin/waitlist", headers={
+            "x-admin-password": ADMIN_PASSWORD
+        }, timeout=10)
+        data = resp.json()
+        passed = (
+            resp.status_code == 200 and
+            data.get("ok") == True and
+            "pageviews" in data and
+            "users" in data and
+            "listings" in data and
+            isinstance(data["pageviews"], int) and
+            isinstance(data["users"], int) and
+            isinstance(data["listings"], int) and
+            data["pageviews"] > 0  # Should have pageviews from test_events
         )
-        
-        print(f"Status Code: {response.status_code}")
-        print(f"Content-Type: {response.headers.get('Content-Type')}")
-        print(f"Response (first 300 chars): {response.text[:300]}...")
-        
-        if response.status_code == 200:
-            content_type = response.headers.get("Content-Type", "")
-            
-            # Check Content-Type
-            if not content_type.startswith("text/csv"):
-                log_test("GET /api/admin/waitlist/export - Content-Type", False, 
-                        f"Expected text/csv, got {content_type}")
-                return False
-            
-            # Check CSV content
-            csv_content = response.text
-            lines = csv_content.strip().split('\n')
-            
-            if len(lines) < 1:
-                log_test("GET /api/admin/waitlist/export - CSV content", False, 
-                        "CSV is empty")
-                return False
-            
-            # Check header row
-            header = lines[0].lower()
-            if "email" not in header or "createdat" not in header or "referrer" not in header:
-                log_test("GET /api/admin/waitlist/export - CSV header", False, 
-                        f"Missing required columns in header: {lines[0]}")
-                return False
-            
-            log_test("GET /api/admin/waitlist/export with password", True, 
-                    f"CSV rows: {len(lines)}")
-            return True
-        else:
-            log_test("GET /api/admin/waitlist/export with password", False, 
-                    f"Expected 200, got {response.status_code}")
-            return False
+        print_test("Admin waitlist with counters", passed, 
+                   f"Status: {resp.status_code}, Pageviews: {data.get('pageviews')}, Users: {data.get('users')}, Listings: {data.get('listings')}")
     except Exception as e:
-        log_test("GET /api/admin/waitlist/export with password", False, f"Exception: {str(e)}")
-        return False
+        print_test("Admin waitlist with counters", False, f"Error: {e}")
 
 def main():
-    """Run all backend tests"""
-    print("\n" + "="*80)
-    print("TAPISSERIE PHASE 1 - BACKEND API TESTS")
-    print("="*80)
+    print("=" * 80)
+    print("TAPISSERIE PHASE 2 BACKEND API TESTS")
+    print("=" * 80)
     print(f"Base URL: {BASE_URL}")
     print(f"Admin Password: {ADMIN_PASSWORD}")
-    print(f"Test Time: {datetime.now().isoformat()}")
+    print("=" * 80)
     
-    # Test in priority order as specified in review_request
+    # Test 1: Events
+    test_events()
     
-    # 1. Health endpoint (quick check)
-    test_health_endpoint()
+    # Test 2: Signup (returns session with cookie)
+    session_with_auth, email, username, password = test_auth_signup()
     
-    # 2. Waitlist endpoints (high priority)
-    valid_email = test_waitlist_valid_email()
-    if valid_email:
-        test_waitlist_duplicate_email(valid_email)
+    # Test 3: Me endpoint
+    session_without_auth = requests.Session()
+    test_me(session_with_auth, session_without_auth)
     
-    test_waitlist_email_normalization()
-    test_waitlist_invalid_email()
-    test_waitlist_missing_email()
-    test_waitlist_stats()
+    # Test 4: Login
+    login_session = test_login(email, username, password)
     
-    # 3. Admin auth (high priority)
-    test_admin_auth_valid()
-    test_admin_auth_invalid()
+    # Test 5: Logout
+    test_logout(login_session)
     
-    # 4. Admin waitlist listing (high priority)
-    test_admin_waitlist_no_auth()
-    test_admin_waitlist_with_auth()
+    # Create a fresh authenticated session for listings tests
+    fresh_session = requests.Session()
+    fresh_session.post(f"{BASE_URL}/auth/login", json={
+        "email": email,
+        "password": password
+    }, timeout=10)
     
-    # 5. Admin export (high priority)
-    test_admin_export_no_auth()
-    test_admin_export_with_auth()
+    # Test 6: Create listings
+    listing_id = test_listings_create(fresh_session, session_without_auth)
     
-    # Print summary
-    print("\n" + "="*80)
-    print("TEST SUMMARY")
-    print("="*80)
-    print(f"✅ Passed: {test_results['passed']}")
-    print(f"❌ Failed: {test_results['failed']}")
-    print(f"Total: {test_results['passed'] + test_results['failed']}")
+    # Test 7: List listings
+    test_listings_list(listing_id)
     
-    if test_results['failed'] > 0:
-        print("\n" + "="*80)
-        print("FAILED TESTS:")
-        print("="*80)
-        for error in test_results['errors']:
-            print(f"  • {error}")
+    # Test 8: Listing detail
+    test_listings_detail(listing_id)
     
-    # Exit with appropriate code
-    sys.exit(0 if test_results['failed'] == 0 else 1)
+    # Test 9: Waitlist regression
+    test_waitlist_regression()
+    
+    # Test 10: Admin waitlist with counters
+    test_admin_waitlist_counters()
+    
+    print("\n" + "=" * 80)
+    print("TESTING COMPLETE")
+    print("=" * 80)
 
 if __name__ == "__main__":
     main()

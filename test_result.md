@@ -156,6 +156,52 @@ backend:
         agent: "testing"
         comment: "✅ Health endpoint test passed (1/1): GET /api/health returns 200 with {ok:true, service:'tapisserie-api', time:ISO8601}."
 
+  - task: "Events / pageview beacon"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/events accepts {type,path,meta} and stores in events collection. Used by landing page for pageview tracking. Admin waitlist endpoint also returns pageviews/users/listings counters."
+      - working: true
+        agent: "testing"
+        comment: "✅ All events API tests passed (2/2): POST /api/events with valid {type:'pageview', path:'/'} returns 200 {ok:true}. Missing type field (empty body) still returns 200 {ok:true} with best-effort handling (stores type:'unknown'). Verified GET /api/admin/waitlist now includes pageviews counter (value: 1) along with users and listings counters. Events are correctly stored in MongoDB events collection."
+
+  - task: "Phase 2 Auth (signup, login, logout, me)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/auth/signup creates user (bcryptjs hash + jose JWT in httpOnly cookie 'tap_session', 30d expiry). Validates email format, password >=8 chars, username >=3 chars (a-z0-9_). Returns 409 on duplicate email or username. POST /api/auth/login verifies credentials, sets cookie. POST /api/auth/logout clears cookie. GET /api/me returns {user:null} when unauthenticated or {user:{...sanitized}} when authenticated. Smoke tested via curl: signup -> /me -> create listing -> public listings all work."
+      - working: true
+        agent: "testing"
+        comment: "✅ All Phase 2 Auth tests passed (16/16). SIGNUP (7 tests): Valid signup with email/username/password returns 200 {ok:true, user:{...}} with httpOnly cookie 'tap_session' set ✓. Response excludes passwordHash and _id fields ✓. Duplicate email returns 409 ✓. Duplicate username returns 409 ✓. Invalid email 'abc' returns 400 ✓. Short password (<8 chars) returns 400 ✓. Short username (<3 chars) returns 400 ✓. Username normalization works correctly: 'Bob Smith!' normalized to 'bobsmith' (lowercase, strip non-[a-z0-9_]) ✓. ME ENDPOINT (2 tests): GET /api/me without cookie returns 200 {user:null} ✓. With valid session cookie returns 200 {user:{...}} without passwordHash or _id ✓. LOGIN (4 tests): Correct credentials return 200 {ok:true, user} with cookie ✓. Wrong password returns 401 ✓. Unknown email returns 401 ✓. Missing fields return 400 ✓. LOGOUT (2 tests): POST /api/auth/logout returns 200 {ok:true} ✓. After logout, GET /api/me returns {user:null} confirming session cleared ✓. Cookie handling, JWT signing/verification, bcrypt password hashing, and all validation rules working correctly."
+
+  - task: "Phase 2 Listings (list, create, detail)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/listings -> public list, ?q= filters by title/brand/collection case-insensitive, sorted by createdAt desc, limit 60. POST /api/listings requires auth cookie; validates title (min 3) and price (>0); accepts brand, collection, reference, year, condition, location, boxIncluded, papersIncluded, description (max 4000), and up to 8 http(s) image URLs; injects sellerUsername/sellerAvatar from the authenticated user. GET /api/listings/:id returns the listing or 404."
+      - working: true
+        agent: "testing"
+        comment: "✅ All Phase 2 Listings tests passed (17/17). CREATE (10 tests): POST /api/listings without auth returns 401 ✓. Valid listing with all fields (title, price:4850, description, collection, reference, year, condition, location, boxIncluded, papersIncluded, images) returns 200 {ok:true, listing:{...}} with correct price, currency:'EUR', status:'active', sellerUsername, createdAt ✓. Missing title returns 400 ✓. Title length 2 returns 400 ✓. Price 0 returns 400 ✓. Negative price returns 400 ✓. Non-numeric price returns 400 ✓. Passing 10 image URLs correctly stores only 8 (max enforced) ✓. Non-http URLs (ftp://) correctly filtered out, only http(s) URLs stored ✓. Description >4000 chars correctly truncated to exactly 4000 ✓. LIST (4 tests): GET /api/listings returns 200 {ok:true, items:[...]} sorted by createdAt desc ✓. Newly created listing appears in items array ✓. Query filter ?q=Brassus returns matching results (case-insensitive search on title/brand/collection) ✓. Query ?q=NONEXISTENT_ABC returns empty items:[] ✓. DETAIL (2 tests): GET /api/listings/{id} with valid ID returns 200 {ok:true, listing:{...}} without _id field ✓. Unknown/fake ID returns 404 {error} ✓. All validation rules, filtering, sorting, and data sanitization working correctly."
+
+
 frontend:
   - task: "Landing page UI"
     implemented: true
@@ -335,3 +381,86 @@ agent_communication:
       
       CONCLUSION:
       Hydration fix is working perfectly. Landing page is production-ready with no hydration issues.
+
+
+  - agent: "testing"
+    message: |
+      ✅ PHASE 2 BACKEND TESTING COMPLETE - ALL TESTS PASSED (38/38)
+      
+      Comprehensive testing of all Phase 2 backend endpoints completed successfully.
+      Base URL: https://chronoluxe-trade.preview.emergentagent.com/api
+      
+      Test Results Summary:
+      
+      1. Events / Pageview Beacon (2 tests) - ALL PASSED
+         ✅ POST /api/events with valid pageview event
+         ✅ POST /api/events with missing type (best-effort handling)
+         ✅ Verified admin endpoint now returns pageviews counter
+      
+      2. Phase 2 Auth (16 tests) - ALL PASSED
+         SIGNUP (7 tests):
+         ✅ Valid signup with email/username/password
+         ✅ HttpOnly cookie 'tap_session' set correctly
+         ✅ Response excludes passwordHash and _id
+         ✅ Duplicate email rejection (409)
+         ✅ Duplicate username rejection (409)
+         ✅ Invalid email rejection (400)
+         ✅ Short password rejection (400)
+         ✅ Short username rejection (400)
+         ✅ Username normalization ('Bob Smith!' → 'bobsmith')
+         
+         ME ENDPOINT (2 tests):
+         ✅ GET /api/me without cookie returns {user:null}
+         ✅ GET /api/me with cookie returns sanitized user
+         
+         LOGIN (4 tests):
+         ✅ Correct credentials with cookie
+         ✅ Wrong password rejection (401)
+         ✅ Unknown email rejection (401)
+         ✅ Missing fields rejection (400)
+         
+         LOGOUT (2 tests):
+         ✅ Logout clears session
+         ✅ GET /api/me after logout returns null
+      
+      3. Phase 2 Listings (17 tests) - ALL PASSED
+         CREATE (10 tests):
+         ✅ Unauthorized access blocked (401)
+         ✅ Valid listing creation with all fields
+         ✅ Missing title rejection (400)
+         ✅ Short title rejection (400)
+         ✅ Zero price rejection (400)
+         ✅ Negative price rejection (400)
+         ✅ Non-numeric price rejection (400)
+         ✅ Max 8 images enforced (10 provided, 8 stored)
+         ✅ Non-http URLs filtered (ftp:// removed)
+         ✅ Description truncated to 4000 chars
+         
+         LIST (4 tests):
+         ✅ Public listing endpoint
+         ✅ Newly created listing appears
+         ✅ Query filter ?q=Brassus (case-insensitive)
+         ✅ Non-existent query returns empty
+         
+         DETAIL (2 tests):
+         ✅ Valid listing ID returns detail
+         ✅ Unknown ID returns 404
+      
+      4. Regression Tests (3 tests) - ALL PASSED
+         ✅ POST /api/waitlist still working
+         ✅ Duplicate detection working
+         ✅ Invalid email validation working
+         ✅ GET /api/admin/waitlist now includes pageviews, users, listings counters
+      
+      VERIFICATION DETAILS:
+      • All authentication flows working correctly (signup → login → logout)
+      • JWT session management with httpOnly cookies functioning properly
+      • Password hashing with bcryptjs verified
+      • All validation rules enforced correctly
+      • Data sanitization working (_id and passwordHash excluded from responses)
+      • Query filtering and sorting working as expected
+      • Image URL validation and limits enforced
+      • Description truncation working
+      • All error responses have correct status codes and error messages
+      
+      NO CRITICAL ISSUES FOUND. All Phase 2 backend functionality is production-ready.
