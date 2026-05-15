@@ -202,6 +202,74 @@ backend:
         comment: "✅ All Phase 2 Listings tests passed (17/17). CREATE (10 tests): POST /api/listings without auth returns 401 ✓. Valid listing with all fields (title, price:4850, description, collection, reference, year, condition, location, boxIncluded, papersIncluded, images) returns 200 {ok:true, listing:{...}} with correct price, currency:'EUR', status:'active', sellerUsername, createdAt ✓. Missing title returns 400 ✓. Title length 2 returns 400 ✓. Price 0 returns 400 ✓. Negative price returns 400 ✓. Non-numeric price returns 400 ✓. Passing 10 image URLs correctly stores only 8 (max enforced) ✓. Non-http URLs (ftp://) correctly filtered out, only http(s) URLs stored ✓. Description >4000 chars correctly truncated to exactly 4000 ✓. LIST (4 tests): GET /api/listings returns 200 {ok:true, items:[...]} sorted by createdAt desc ✓. Newly created listing appears in items array ✓. Query filter ?q=Brassus returns matching results (case-insensitive search on title/brand/collection) ✓. Query ?q=NONEXISTENT_ABC returns empty items:[] ✓. DETAIL (2 tests): GET /api/listings/{id} with valid ID returns 200 {ok:true, listing:{...}} without _id field ✓. Unknown/fake ID returns 404 {error} ✓. All validation rules, filtering, sorting, and data sanitization working correctly."
 
 
+  - task: "Image upload (multipart, disk-backed)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/upload accepts multipart/form-data with field 'files' (up to 8). Requires auth (tap_session cookie); 401 otherwise. Validates each file: must be image/* MIME and <=8MB. Saves to /app/public/uploads/{uuid}.{ext} and returns {ok:true, urls:['/uploads/<file>',...]}. Served as static assets by Next.js. Smoke tested: non-image rejected, real JPG uploaded -> public URL returns HTTP 200 with correct bytes."
+      - working: true
+        agent: "testing"
+        comment: "✅ All image upload tests passed (6/6): POST /api/upload without auth returns 401 ✓. Non-image file (.txt) rejected with 400 and error message containing 'is not an image' ✓. Valid PNG image uploaded successfully returns 200 {ok:true, urls:['/uploads/<uuid>.png']} ✓. Uploaded image accessible via public URL (https://chronoluxe-trade.preview.emergentagent.com/uploads/<uuid>.png) returns 200 with image data ✓. Uploading 0 files returns 400 ✓. Uploading 9 files (>8 max) returns 400 with 'Maximum 8 images at once' error ✓. All validation rules working correctly."
+
+  - task: "Shipping estimate (Nominatim + Haversine)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/shipping/estimate {from, to} -> geocodes both places via Nominatim (OpenStreetMap, no key, in-memory cache), computes Haversine distance in km, and returns {ok:true, distanceKm, costEUR, eta, from(label), to(label)}. Cost model: €15 base fee + €6 per 100km, rounded. ETA brackets: <500km=1-2bd, <2000km=2-4bd, else 4-7bd. Smoke tested Paris->Berlin = 877km, €68, 2-4 business days. Missing from/to returns 400. Ungeocodable address returns 422."
+      - working: true
+        agent: "testing"
+        comment: "✅ All shipping estimate tests passed (3/3): Missing 'from' field returns 400 with error 'Both \"from\" and \"to\" locations are required' ✓. Valid locations (Paris, France -> Berlin, Germany) returns 200 {ok:true, distanceKm:877, costEUR:68, eta:'2-4 business days', from:'Paris, Ile-de-France, Metropolitan France, France', to:'Berlin, Germany'} - distance in expected range 850-900km ✓. Garbage location 'qqqqqqqq XXXX invalid' returns 422 with error 'Could not locate one of the addresses' ✓. Nominatim geocoding, Haversine distance calculation, and cost/ETA logic all working correctly."
+
+  - task: "User profile endpoint"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/users/:username returns {ok:true, user:{...sanitized, no email/passwordHash}, listings:[...], stats:{active, sold, rating, ratingCount}}. PUT /api/me updates current user's bio (max 500), location (max 120), avatarUrl (must be http). Unknown username -> 404. Smoke tested for alice_collector."
+      - working: true
+        agent: "testing"
+        comment: "✅ All user profile tests passed (7/7): GET /api/users/:username with unknown username returns 404 ✓. Existing user returns 200 {ok:true, user:{username, avatarUrl, bio, location, rating, ratingCount, createdAt}, listings:[], stats:{active, sold, rating, ratingCount}} - response DOES NOT contain email or passwordHash (sanitized correctly) ✓. PUT /api/me without auth returns 401 ✓. Valid update with bio, location, avatarUrl returns 200 with updated user ✓. Bio >500 chars correctly truncated to exactly 500 chars ✓. Invalid avatarUrl (ftp://) rejected - validation requires http/https ✓. Empty update body returns 400 'Nothing to update' ✓. All validation and sanitization working correctly."
+
+  - task: "Conversations and messages (chat + offers + counter)"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: |
+          POST /api/conversations {listingId} creates or returns existing conversation between current user (buyer) and listing's seller. Returns 400 if buyer is the listing owner; 404 if listing missing; 401 if unauthenticated. Idempotent: re-calling returns same conversation (unique index on listingId+buyerId).
+          GET /api/conversations -> auth required, lists the user's conversations sorted by updatedAt desc, including lastMessage preview.
+          GET /api/conversations/:id -> auth required + participant check (403 if not a participant). Optional ?since=ISO to fetch only newer messages (used for polling). Returns {ok, conversation, messages}.
+          POST /api/conversations/:id/messages -> {type:'text'|'offer', text?, price?}. Text must be non-empty; offer must have valid price. Updates conversation.lastMessage and updatedAt.
+          POST /api/messages/:id/offer-action {action:'accept'|'reject'|'counter', price?} -> only the OTHER party can act (400 otherwise). Updates the offer's offerStatus, emits a system message ('Offer accepted at €X' / 'Offer declined'). For 'counter' creates a new offer message from the responder with the counter price (pending). All actions return ok:true.
+          Smoke tested end-to-end: signup two users, buyer starts convo, sends offer + text, seller (other party) fetches convo and sees both messages, non-participant gets 403.
+      - working: true
+        agent: "testing"
+        comment: |
+          ✅ All conversations and messages tests passed (22/22). CONVERSATIONS (8 tests): POST /api/conversations as buyer with {listingId} returns 200 {ok:true, conversation:{id, listingId, sellerId, buyerId, participants:[2 ids], listingTitle, listingPrice, lastMessage:null}} ✓. Idempotent - calling again returns same conversation ID ✓. Seller trying to create conversation on own listing returns 400 "can't start a conversation on your own listing" ✓. GET /api/conversations as buyer returns list including the conversation ✓. GET /api/conversations without auth returns 401 ✓. GET /api/conversations/:id as buyer returns 200 with messages:[] ✓. GET /api/conversations/:id without auth returns 401 ✓. Non-participant (third user) trying to access conversation returns 403 ✓. MESSAGES (4 tests): POST /api/conversations/:id/messages as buyer with {type:'text', text:'Hello'} returns 200, message stored ✓. POST with {type:'offer', price:4200} returns 200, message stored with offerStatus:'pending' ✓. GET /api/conversations/:id as seller returns 2 messages in order, conversation.lastMessage reflects the offer ✓. GET with ?since=<ISO> returns only messages after that timestamp (1 offer message) ✓. OFFER ACTIONS (5 tests): POST /api/messages/:id/offer-action as buyer (sender) returns 400 "can't respond to your own offer" ✓. POST as seller with {action:'accept'} returns 200, offer.offerStatus becomes 'accepted', system message appended ✓. POST with {action:'reject'} on second offer returns 200, status 'rejected' ✓. POST with {action:'counter', price:4700} on third offer returns 200, response includes counter offer with status:pending, counter-offer appears in conversation ✓. POST with {action:'unknown'} returns 400 ✓. REGRESSION (5 tests): POST /api/waitlist still works ✓. POST /api/auth/signup still works ✓. POST /api/auth/login still works ✓. GET /api/listings still works ✓. GET /api/me still works ✓. All authentication, authorization, validation, idempotency, and business logic working correctly.
+
+
 frontend:
   - task: "Landing page UI"
     implemented: true
@@ -461,6 +529,83 @@ agent_communication:
       • Query filtering and sorting working as expected
       • Image URL validation and limits enforced
       • Description truncation working
+      • All error responses have correct status codes and error messages
+      
+      NO CRITICAL ISSUES FOUND. All Phase 2 backend functionality is production-ready.
+
+
+  - agent: "testing"
+    message: |
+      ✅ PHASE 2 ADDITIONAL FEATURES TESTING COMPLETE - ALL TESTS PASSED (38/38)
+      
+      Comprehensive testing of all Phase 2 new backend endpoints completed successfully.
+      Base URL: https://chronoluxe-trade.preview.emergentagent.com/api
+      Test file: /app/backend_test.py
+      
+      Test Results Summary:
+      
+      1. Image Upload (6 tests) - ALL PASSED
+         ✅ Unauthorized upload blocked (401)
+         ✅ Non-image file (.txt) rejected with correct error message
+         ✅ Valid PNG image uploaded successfully
+         ✅ Uploaded image accessible via public URL
+         ✅ Empty upload rejected (400)
+         ✅ >8 files rejected with max limit error
+      
+      2. Shipping Estimate (3 tests) - ALL PASSED
+         ✅ Missing 'from' field rejected (400)
+         ✅ Valid Paris->Berlin estimate (877km, €68, 2-4 business days)
+         ✅ Invalid location rejected (422)
+      
+      3. User Profile (2 tests) - ALL PASSED
+         ✅ Unknown username returns 404
+         ✅ Existing user profile returned without email/passwordHash
+      
+      4. Update Profile (5 tests) - ALL PASSED
+         ✅ Unauthorized update blocked (401)
+         ✅ Valid profile update successful
+         ✅ Bio truncated to 500 chars
+         ✅ Invalid avatarUrl (ftp://) rejected
+         ✅ Empty update body rejected (400)
+      
+      5. Conversations & Messages (12 tests) - ALL PASSED
+         ✅ Buyer creates conversation successfully
+         ✅ Idempotent - same conversation returned
+         ✅ Seller blocked from creating conversation on own listing
+         ✅ Conversation appears in buyer's list
+         ✅ Unauthorized access blocked (401)
+         ✅ Conversation detail retrieved with empty messages
+         ✅ Unauthorized access blocked (401)
+         ✅ Non-participant blocked (403)
+         ✅ Text message sent successfully
+         ✅ Offer sent with pending status
+         ✅ Seller sees both messages, lastMessage reflects offer
+         ✅ ?since filter works correctly
+      
+      6. Offer Actions (5 tests) - ALL PASSED
+         ✅ Sender blocked from responding to own offer
+         ✅ Offer accepted successfully with system message
+         ✅ Offer rejected successfully
+         ✅ Counter-offer created successfully
+         ✅ Invalid action rejected (400)
+      
+      7. Regression Tests (5 tests) - ALL PASSED
+         ✅ POST /api/waitlist still working
+         ✅ POST /api/auth/signup still working
+         ✅ POST /api/auth/login still working
+         ✅ GET /api/listings still working
+         ✅ GET /api/me still working
+      
+      VERIFICATION DETAILS:
+      • All authentication flows working correctly (httpOnly cookie 'tap_session')
+      • All authorization checks working (401 for unauthenticated, 403 for non-participants)
+      • All validation rules enforced correctly
+      • Image upload with multipart/form-data working, files saved to /app/public/uploads/
+      • Nominatim geocoding and Haversine distance calculation working
+      • User profile sanitization working (no email/passwordHash in responses)
+      • Conversation idempotency working (unique index on listingId+buyerId)
+      • Message polling with ?since parameter working
+      • Offer actions (accept/reject/counter) working with system messages
       • All error responses have correct status codes and error messages
       
       NO CRITICAL ISSUES FOUND. All Phase 2 backend functionality is production-ready.

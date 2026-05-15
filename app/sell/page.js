@@ -5,63 +5,35 @@ import MarketplaceNav from '@/components/marketplace-nav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
+import ImageDropzone from '@/components/image-dropzone'
 import { toast } from 'sonner'
-import { Plus, X } from 'lucide-react'
 
 function App() {
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(true)
   const [form, setForm] = useState({
-    title: '',
-    description: '',
-    brand: 'AP × Swatch',
-    collection: '',
-    reference: '',
-    year: '',
-    condition: 'New',
-    price: '',
-    location: '',
-    boxIncluded: true,
-    papersIncluded: true,
+    title: '', description: '', brand: 'AP × Swatch', collection: '', reference: '', year: '',
+    condition: 'New', price: '', location: '', boxIncluded: true, papersIncluded: true,
   })
-  const [imageUrl, setImageUrl] = useState('')
   const [images, setImages] = useState([])
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    fetch('/api/me')
-      .then((r) => r.json())
-      .then((d) => {
-        setUser(d.user || null)
-        if (!d.user) {
-          toast.error('Sign in to list a watch.')
-          setTimeout(() => { window.location.href = '/login' }, 1500)
-        }
-      })
-      .finally(() => setChecking(false))
+    fetch('/api/me').then((r) => r.json()).then((d) => {
+      setUser(d.user || null)
+      if (!d.user) {
+        toast.error('Sign in to list a watch.')
+        setTimeout(() => (window.location.href = '/login'), 1200)
+      }
+    }).finally(() => setChecking(false))
   }, [])
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
   const toggle = (k) => () => setForm({ ...form, [k]: !form[k] })
 
-  const addImage = () => {
-    const u = imageUrl.trim()
-    if (!u.startsWith('http')) {
-      toast.error('Paste a valid http(s) image URL.')
-      return
-    }
-    if (images.length >= 8) {
-      toast.error('Max 8 images.')
-      return
-    }
-    setImages([...images, u])
-    setImageUrl('')
-  }
-
-  const removeImage = (i) => setImages(images.filter((_, idx) => idx !== i))
-
   const submit = async (e) => {
     e.preventDefault()
+    if (images.length === 0) { toast.error('Add at least one image.'); return }
     setSubmitting(true)
     try {
       const res = await fetch('/api/listings', {
@@ -70,21 +42,17 @@ function App() {
         body: JSON.stringify({ ...form, images, price: Number(form.price), year: form.year ? Number(form.year) : null }),
       })
       const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error || 'Could not create listing.')
-      } else {
+      if (!res.ok) toast.error(data.error || 'Could not create listing.')
+      else {
         toast.success('Listing live.')
         window.location.href = `/listings/${data.listing.id}`
       }
-    } catch {
-      toast.error('Network error.')
-    } finally {
-      setSubmitting(false)
-    }
+    } catch { toast.error('Network error.') }
+    finally { setSubmitting(false) }
   }
 
   if (checking) return <main className="min-h-screen bg-background"><MarketplaceNav /><div className="p-10 text-muted-foreground">Loading…</div></main>
-  if (!user) return <main className="min-h-screen bg-background"><MarketplaceNav /><div className="p-10 text-muted-foreground">Redirecting to sign in…</div></main>
+  if (!user) return <main className="min-h-screen bg-background"><MarketplaceNav /><div className="p-10 text-muted-foreground">Redirecting…</div></main>
 
   return (
     <main className="min-h-screen bg-background">
@@ -94,6 +62,11 @@ function App() {
         <h1 className="font-serif text-3xl sm:text-4xl text-white mb-8">Create your listing</h1>
 
         <form onSubmit={submit} className="space-y-6">
+          <Card className="bg-card border-white/10 p-6">
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Photos</div>
+            <ImageDropzone images={images} onChange={setImages} max={8} />
+          </Card>
+
           <Card className="bg-card border-white/10 p-6 space-y-4">
             <div>
               <label className="text-xs text-muted-foreground uppercase tracking-wider">Title</label>
@@ -131,7 +104,7 @@ function App() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground uppercase tracking-wider">Location</label>
-              <Input value={form.location} onChange={set('location')} placeholder="Paris, France" className="bg-white/5 border-white/10 text-white rounded-sm mt-1" />
+              <Input value={form.location} onChange={set('location')} placeholder="e.g. Paris, France" className="bg-white/5 border-white/10 text-white rounded-sm mt-1" />
             </div>
             <div className="flex gap-6">
               <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
@@ -145,26 +118,6 @@ function App() {
               <label className="text-xs text-muted-foreground uppercase tracking-wider">Description</label>
               <textarea value={form.description} onChange={set('description')} rows={5} placeholder="Honest condition notes, history, any details a serious buyer should know." className="w-full mt-1 bg-white/5 border border-white/10 text-white rounded-sm p-3 text-sm" />
             </div>
-          </Card>
-
-          <Card className="bg-card border-white/10 p-6">
-            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Images (paste URLs — max 8)</div>
-            <div className="flex gap-2 mb-4">
-              <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://..." className="bg-white/5 border-white/10 text-white rounded-sm" />
-              <Button type="button" onClick={addImage} className="bg-white text-black hover:bg-white/90 rounded-sm"><Plus className="w-4 h-4" /></Button>
-            </div>
-            {images.length > 0 && (
-              <div className="grid grid-cols-4 gap-2">
-                {images.map((u, i) => (
-                  <div key={i} className="relative aspect-square rounded-sm overflow-hidden border border-white/10">
-                    <img src={u} alt="" className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => removeImage(i)} className="absolute top-1 right-1 bg-black/70 p-1 rounded-sm hover:bg-black">
-                      <X className="w-3 h-3 text-white" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </Card>
 
           <div className="flex gap-3">

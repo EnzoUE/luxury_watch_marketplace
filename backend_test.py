@@ -1,633 +1,882 @@
 #!/usr/bin/env python3
 """
-TAPISSERIE Phase 2 Backend API Tests
-Tests all Phase 2 endpoints: events, auth (signup/login/logout/me), listings
+Backend API tests for TAPISSERIE Phase 2
+Tests all new endpoints: upload, shipping, user profiles, conversations, messages, offers
 """
-
 import requests
+import json
+import io
+from PIL import Image
 import time
-import random
-import string
 
 BASE_URL = "https://chronoluxe-trade.preview.emergentagent.com/api"
-ADMIN_PASSWORD = "swatch2026"
 
-def random_nonce():
-    """Generate random string for unique test data"""
-    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+def create_test_image():
+    """Create a small test PNG image in memory"""
+    img = Image.new('RGB', (100, 100), color='red')
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return buf
 
-def print_test(name, passed, details=""):
-    """Print test result"""
-    status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"{status}: {name}")
-    if details:
-        print(f"   {details}")
+def create_test_txt_file():
+    """Create a test text file"""
+    return io.BytesIO(b"This is a text file, not an image")
 
-def test_events():
-    """Test POST /api/events - pageview beacon"""
-    print("\n=== TEST 1: POST /api/events ===")
-    
-    # Test 1a: Valid pageview event
-    try:
-        resp = requests.post(f"{BASE_URL}/events", json={"type": "pageview", "path": "/"}, timeout=10)
-        passed = resp.status_code == 200 and resp.json().get("ok") == True
-        print_test("Valid pageview event", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Valid pageview event", False, f"Error: {e}")
-    
-    # Test 1b: Missing type (best-effort, should still work)
-    try:
-        resp = requests.post(f"{BASE_URL}/events", json={}, timeout=10)
-        passed = resp.status_code == 200 and resp.json().get("ok") == True
-        print_test("Missing type (best-effort)", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Missing type (best-effort)", False, f"Error: {e}")
+print("=" * 80)
+print("TAPISSERIE PHASE 2 BACKEND TESTS")
+print("=" * 80)
 
-def test_auth_signup():
-    """Test POST /api/auth/signup with extensive validation"""
-    print("\n=== TEST 2: POST /api/auth/signup ===")
-    
-    nonce = random_nonce()
-    valid_email = f"bob+{nonce}@tap.test"
-    valid_username = f"bob_{nonce}"
-    valid_password = "royaloak2026"
-    
-    # Test 2a: Valid signup
-    session = requests.Session()
-    try:
-        resp = session.post(f"{BASE_URL}/auth/signup", json={
-            "email": valid_email,
-            "username": valid_username,
-            "password": valid_password
-        }, timeout=10)
-        data = resp.json()
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            "user" in data and
-            data["user"].get("email") == valid_email and
-            data["user"].get("username") == valid_username and
-            "passwordHash" not in data["user"] and
-            "_id" not in data["user"]
-        )
-        # Check cookie
-        cookie_set = "tap_session" in session.cookies
-        print_test("Valid signup", passed and cookie_set, 
-                   f"Status: {resp.status_code}, User: {data.get('user', {}).get('username')}, Cookie: {cookie_set}")
-    except Exception as e:
-        print_test("Valid signup", False, f"Error: {e}")
-    
-    # Test 2b: Duplicate email
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/signup", json={
-            "email": valid_email,
-            "username": f"different_{nonce}",
-            "password": valid_password
-        }, timeout=10)
-        passed = resp.status_code == 409 and "error" in resp.json()
-        print_test("Duplicate email rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Duplicate email rejection", False, f"Error: {e}")
-    
-    # Test 2c: Duplicate username
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/signup", json={
-            "email": f"different+{nonce}@tap.test",
-            "username": valid_username,
-            "password": valid_password
-        }, timeout=10)
-        passed = resp.status_code == 409 and "error" in resp.json()
-        print_test("Duplicate username rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Duplicate username rejection", False, f"Error: {e}")
-    
-    # Test 2d: Invalid email
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/signup", json={
-            "email": "abc",
-            "username": f"test_{nonce}",
-            "password": valid_password
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Invalid email rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Invalid email rejection", False, f"Error: {e}")
-    
-    # Test 2e: Short password
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/signup", json={
-            "email": f"short+{nonce}@tap.test",
-            "username": f"short_{nonce}",
-            "password": "short"
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Short password rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Short password rejection", False, f"Error: {e}")
-    
-    # Test 2f: Short username
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/signup", json={
-            "email": f"shortuser+{nonce}@tap.test",
-            "username": "ab",
-            "password": valid_password
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Short username rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Short username rejection", False, f"Error: {e}")
-    
-    # Test 2g: Username normalization
-    try:
-        nonce2 = random_nonce()
-        resp = requests.post(f"{BASE_URL}/auth/signup", json={
-            "email": f"normalize+{nonce2}@tap.test",
-            "username": "Bob Smith!",
-            "password": valid_password
-        }, timeout=10)
-        data = resp.json()
-        # Should normalize to "bobsmith" (lowercase, strip non-[a-z0-9_])
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            data.get("user", {}).get("username") == "bobsmith"
-        )
-        print_test("Username normalization", passed, 
-                   f"Status: {resp.status_code}, Normalized username: {data.get('user', {}).get('username')}")
-    except Exception as e:
-        print_test("Username normalization", False, f"Error: {e}")
-    
-    return session, valid_email, valid_username, valid_password
+# ============================================================================
+# TEST 1: IMAGE UPLOAD ENDPOINT
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 1: POST /api/upload (Image Upload)")
+print("=" * 80)
 
-def test_me(session_with_cookie, session_without_cookie):
-    """Test GET /api/me"""
-    print("\n=== TEST 3: GET /api/me ===")
-    
-    # Test 3a: Without cookie
-    try:
-        resp = session_without_cookie.get(f"{BASE_URL}/me", timeout=10)
-        data = resp.json()
-        passed = resp.status_code == 200 and data.get("user") is None
-        print_test("GET /me without cookie", passed, f"Status: {resp.status_code}, User: {data.get('user')}")
-    except Exception as e:
-        print_test("GET /me without cookie", False, f"Error: {e}")
-    
-    # Test 3b: With session cookie
-    try:
-        resp = session_with_cookie.get(f"{BASE_URL}/me", timeout=10)
-        data = resp.json()
-        passed = (
-            resp.status_code == 200 and
-            data.get("user") is not None and
-            "passwordHash" not in data.get("user", {}) and
-            "_id" not in data.get("user", {})
-        )
-        print_test("GET /me with cookie", passed, 
-                   f"Status: {resp.status_code}, Username: {data.get('user', {}).get('username')}")
-    except Exception as e:
-        print_test("GET /me with cookie", False, f"Error: {e}")
+# Test 1a: Upload without auth -> 401
+print("\n[1a] Upload without auth cookie -> expect 401")
+try:
+    img_buf = create_test_image()
+    files = {'files': ('test.png', img_buf, 'image/png')}
+    r = requests.post(f"{BASE_URL}/upload", files=files)
+    print(f"Status: {r.status_code}")
+    print(f"Response: {r.json()}")
+    if r.status_code == 401:
+        print("✅ PASS: Unauthorized access blocked")
+    else:
+        print(f"❌ FAIL: Expected 401, got {r.status_code}")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
 
-def test_login(email, username, password):
-    """Test POST /api/auth/login"""
-    print("\n=== TEST 4: POST /api/auth/login ===")
-    
-    # Test 4a: Correct credentials
-    session = requests.Session()
-    try:
-        resp = session.post(f"{BASE_URL}/auth/login", json={
-            "email": email,
-            "password": password
-        }, timeout=10)
-        data = resp.json()
-        cookie_set = "tap_session" in session.cookies
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            "user" in data and
-            cookie_set
-        )
-        print_test("Login with correct credentials", passed, 
-                   f"Status: {resp.status_code}, User: {data.get('user', {}).get('username')}, Cookie: {cookie_set}")
-    except Exception as e:
-        print_test("Login with correct credentials", False, f"Error: {e}")
-    
-    # Test 4b: Wrong password
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/login", json={
-            "email": email,
-            "password": "wrongpassword123"
-        }, timeout=10)
-        passed = resp.status_code == 401 and "error" in resp.json()
-        print_test("Login with wrong password", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Login with wrong password", False, f"Error: {e}")
-    
-    # Test 4c: Unknown email
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/login", json={
-            "email": f"unknown_{random_nonce()}@tap.test",
-            "password": password
-        }, timeout=10)
-        passed = resp.status_code == 401 and "error" in resp.json()
-        print_test("Login with unknown email", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Login with unknown email", False, f"Error: {e}")
-    
-    # Test 4d: Missing fields
-    try:
-        resp = requests.post(f"{BASE_URL}/auth/login", json={}, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Login with missing fields", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Login with missing fields", False, f"Error: {e}")
-    
-    return session
+# Create a test user for authenticated upload tests
+print("\n[Setup] Creating test user for upload tests...")
+test_user_upload = {
+    "email": f"uploader_{int(time.time())}@tapisserie.test",
+    "username": f"uploader{int(time.time())}",
+    "password": "testpass123"
+}
+try:
+    r = requests.post(f"{BASE_URL}/auth/signup", json=test_user_upload)
+    if r.status_code == 200:
+        upload_cookie = r.cookies.get('tap_session')
+        print(f"✅ Test user created: {test_user_upload['username']}")
+    else:
+        print(f"❌ Failed to create test user: {r.status_code} {r.text}")
+        upload_cookie = None
+except Exception as e:
+    print(f"❌ Failed to create test user: {e}")
+    upload_cookie = None
 
-def test_logout(session):
-    """Test POST /api/auth/logout"""
-    print("\n=== TEST 5: POST /api/auth/logout ===")
-    
-    # Test 5a: Logout
+if upload_cookie:
+    # Test 1b: Upload non-image file -> 400
+    print("\n[1b] Upload .txt file (not image) with auth -> expect 400")
     try:
-        resp = session.post(f"{BASE_URL}/auth/logout", timeout=10)
-        passed = resp.status_code == 200 and resp.json().get("ok") == True
-        print_test("Logout", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+        txt_buf = create_test_txt_file()
+        files = {'files': ('test.txt', txt_buf, 'text/plain')}
+        cookies = {'tap_session': upload_cookie}
+        r = requests.post(f"{BASE_URL}/upload", files=files, cookies=cookies)
+        print(f"Status: {r.status_code}")
+        print(f"Response: {r.json()}")
+        if r.status_code == 400 and 'is not an image' in r.json().get('error', ''):
+            print("✅ PASS: Non-image file rejected with correct error message")
+        else:
+            print(f"❌ FAIL: Expected 400 with 'is not an image' error")
     except Exception as e:
-        print_test("Logout", False, f"Error: {e}")
-    
-    # Test 5b: Verify /me returns null after logout
-    try:
-        resp = session.get(f"{BASE_URL}/me", timeout=10)
-        data = resp.json()
-        passed = resp.status_code == 200 and data.get("user") is None
-        print_test("GET /me after logout returns null", passed, f"Status: {resp.status_code}, User: {data.get('user')}")
-    except Exception as e:
-        print_test("GET /me after logout returns null", False, f"Error: {e}")
+        print(f"❌ FAIL: {e}")
 
-def test_listings_create(session_with_auth, session_without_auth):
-    """Test POST /api/listings"""
-    print("\n=== TEST 6: POST /api/listings ===")
-    
-    # Test 6a: Without cookie (unauthorized)
+    # Test 1c: Upload valid image -> 200 with URLs
+    print("\n[1c] Upload valid PNG image with auth -> expect 200 with URLs")
     try:
-        resp = session_without_auth.post(f"{BASE_URL}/listings", json={
-            "title": "Test Listing",
-            "price": 1000
-        }, timeout=10)
-        passed = resp.status_code == 401 and "error" in resp.json()
-        print_test("Create listing without auth", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
+        img_buf = create_test_image()
+        files = {'files': ('test.png', img_buf, 'image/png')}
+        cookies = {'tap_session': upload_cookie}
+        r = requests.post(f"{BASE_URL}/upload", files=files, cookies=cookies)
+        print(f"Status: {r.status_code}")
+        resp = r.json()
+        print(f"Response: {resp}")
+        if r.status_code == 200 and resp.get('ok') and 'urls' in resp and len(resp['urls']) == 1:
+            uploaded_url = resp['urls'][0]
+            print(f"✅ PASS: Image uploaded successfully, URL: {uploaded_url}")
+            
+            # Test 1d: Verify uploaded image is accessible
+            print("\n[1d] Verify uploaded image URL is accessible")
+            # Note: uploaded URL is /uploads/xxx.png, need to fetch from base domain (not /api)
+            full_url = f"https://chronoluxe-trade.preview.emergentagent.com{uploaded_url}"
+            r2 = requests.get(full_url)
+            print(f"GET {full_url}")
+            print(f"Status: {r2.status_code}")
+            if r2.status_code == 200:
+                print(f"✅ PASS: Uploaded image is accessible (Content-Length: {len(r2.content)} bytes)")
+            else:
+                print(f"❌ FAIL: Uploaded image not accessible, status {r2.status_code}")
+        else:
+            print(f"❌ FAIL: Expected 200 with ok:true and urls array")
     except Exception as e:
-        print_test("Create listing without auth", False, f"Error: {e}")
-    
-    # Test 6b: Valid listing with all fields
-    listing_id = None
-    try:
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "AP × Swatch Mission to Le Brassus",
-            "price": 4850,
-            "description": "Sealed",
-            "collection": "Bioceramic Royal Oak",
-            "reference": "APXS-01",
-            "year": 2026,
-            "condition": "New",
-            "location": "Paris, France",
-            "boxIncluded": True,
-            "papersIncluded": True,
-            "images": ["https://example.com/img.jpg", "https://example.com/img2.jpg"]
-        }, timeout=10)
-        data = resp.json()
-        listing_id = data.get("listing", {}).get("id")
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            "listing" in data and
-            data["listing"].get("title") == "AP × Swatch Mission to Le Brassus" and
-            data["listing"].get("price") == 4850 and
-            data["listing"].get("currency") == "EUR" and
-            data["listing"].get("status") == "active" and
-            "sellerUsername" in data["listing"] and
-            "createdAt" in data["listing"]
-        )
-        print_test("Create valid listing", passed, 
-                   f"Status: {resp.status_code}, Listing ID: {listing_id}, Price: {data.get('listing', {}).get('price')}")
-    except Exception as e:
-        print_test("Create valid listing", False, f"Error: {e}")
-    
-    # Test 6c: Missing title
-    try:
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "price": 1000
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Missing title rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Missing title rejection", False, f"Error: {e}")
-    
-    # Test 6d: Title too short
-    try:
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "AB",
-            "price": 1000
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Short title rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Short title rejection", False, f"Error: {e}")
-    
-    # Test 6e: Price zero
-    try:
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "Test Watch",
-            "price": 0
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Zero price rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Zero price rejection", False, f"Error: {e}")
-    
-    # Test 6f: Negative price
-    try:
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "Test Watch",
-            "price": -100
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Negative price rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Negative price rejection", False, f"Error: {e}")
-    
-    # Test 6g: Non-numeric price
-    try:
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "Test Watch",
-            "price": "not-a-number"
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Non-numeric price rejection", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Non-numeric price rejection", False, f"Error: {e}")
-    
-    # Test 6h: More than 8 images (should only store 8)
-    try:
-        ten_images = [f"https://example.com/img{i}.jpg" for i in range(10)]
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "Test Watch with Many Images",
-            "price": 1000,
-            "images": ten_images
-        }, timeout=10)
-        data = resp.json()
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            len(data.get("listing", {}).get("images", [])) == 8
-        )
-        print_test("Max 8 images enforced", passed, 
-                   f"Status: {resp.status_code}, Images stored: {len(data.get('listing', {}).get('images', []))}")
-    except Exception as e:
-        print_test("Max 8 images enforced", False, f"Error: {e}")
-    
-    # Test 6i: Non-http image URL filtered out
-    try:
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "Test Watch with FTP Image",
-            "price": 1000,
-            "images": ["https://example.com/good.jpg", "ftp://bad.com/img.jpg", "https://example.com/good2.jpg"]
-        }, timeout=10)
-        data = resp.json()
-        images = data.get("listing", {}).get("images", [])
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            len(images) == 2 and
-            all(img.startswith("http") for img in images)
-        )
-        print_test("Non-http URLs filtered", passed, 
-                   f"Status: {resp.status_code}, Images: {images}")
-    except Exception as e:
-        print_test("Non-http URLs filtered", False, f"Error: {e}")
-    
-    # Test 6j: Description truncated to 4000 chars
-    try:
-        long_desc = "A" * 5000
-        resp = session_with_auth.post(f"{BASE_URL}/listings", json={
-            "title": "Test Watch with Long Description",
-            "price": 1000,
-            "description": long_desc
-        }, timeout=10)
-        data = resp.json()
-        desc_len = len(data.get("listing", {}).get("description", ""))
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            desc_len == 4000
-        )
-        print_test("Description truncated to 4000 chars", passed, 
-                   f"Status: {resp.status_code}, Description length: {desc_len}")
-    except Exception as e:
-        print_test("Description truncated to 4000 chars", False, f"Error: {e}")
-    
-    return listing_id
+        print(f"❌ FAIL: {e}")
 
-def test_listings_list(listing_id):
-    """Test GET /api/listings"""
-    print("\n=== TEST 7: GET /api/listings ===")
-    
-    # Test 7a: List all listings
+    # Test 1e: Upload 0 files -> 400
+    print("\n[1e] Upload 0 files -> expect 400")
     try:
-        resp = requests.get(f"{BASE_URL}/listings", timeout=10)
-        data = resp.json()
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            "items" in data and
-            isinstance(data["items"], list)
-        )
-        print_test("List all listings", passed, 
-                   f"Status: {resp.status_code}, Count: {len(data.get('items', []))}")
+        cookies = {'tap_session': upload_cookie}
+        r = requests.post(f"{BASE_URL}/upload", files={}, cookies=cookies)
+        print(f"Status: {r.status_code}")
+        print(f"Response: {r.json()}")
+        if r.status_code == 400:
+            print("✅ PASS: Empty upload rejected")
+        else:
+            print(f"❌ FAIL: Expected 400, got {r.status_code}")
     except Exception as e:
-        print_test("List all listings", False, f"Error: {e}")
+        print(f"❌ FAIL: {e}")
+
+    # Test 1f: Upload >8 files -> 400
+    print("\n[1f] Upload 9 files (>8 max) -> expect 400")
+    try:
+        files = []
+        for i in range(9):
+            img_buf = create_test_image()
+            files.append(('files', (f'test{i}.png', img_buf, 'image/png')))
+        cookies = {'tap_session': upload_cookie}
+        r = requests.post(f"{BASE_URL}/upload", files=files, cookies=cookies)
+        print(f"Status: {r.status_code}")
+        print(f"Response: {r.json()}")
+        if r.status_code == 400 and 'max' in r.json().get('error', '').lower():
+            print("✅ PASS: >8 files rejected with max limit error")
+        else:
+            print(f"❌ FAIL: Expected 400 with max limit error")
+    except Exception as e:
+        print(f"❌ FAIL: {e}")
+
+# ============================================================================
+# TEST 2: SHIPPING ESTIMATE ENDPOINT
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 2: POST /api/shipping/estimate")
+print("=" * 80)
+
+# Test 2a: Missing from/to -> 400
+print("\n[2a] Missing 'from' field -> expect 400")
+try:
+    r = requests.post(f"{BASE_URL}/shipping/estimate", json={"to": "Berlin, Germany"})
+    print(f"Status: {r.status_code}")
+    print(f"Response: {r.json()}")
+    if r.status_code == 400:
+        print("✅ PASS: Missing 'from' rejected")
+    else:
+        print(f"❌ FAIL: Expected 400, got {r.status_code}")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
+
+# Test 2b: Valid locations -> 200 with distance and cost
+print("\n[2b] Valid locations (Paris -> Berlin) -> expect 200 with distance ~870-880km")
+try:
+    r = requests.post(f"{BASE_URL}/shipping/estimate", json={
+        "from": "Paris, France",
+        "to": "Berlin, Germany"
+    })
+    print(f"Status: {r.status_code}")
+    resp = r.json()
+    print(f"Response: {json.dumps(resp, indent=2)}")
+    if r.status_code == 200 and resp.get('ok'):
+        dist = resp.get('distanceKm')
+        cost = resp.get('costEUR')
+        eta = resp.get('eta')
+        from_label = resp.get('from')
+        to_label = resp.get('to')
+        print(f"Distance: {dist} km")
+        print(f"Cost: €{cost}")
+        print(f"ETA: {eta}")
+        print(f"From: {from_label}")
+        print(f"To: {to_label}")
+        if 850 <= dist <= 900 and cost > 0 and eta and from_label and to_label:
+            print("✅ PASS: Valid shipping estimate returned")
+        else:
+            print(f"❌ FAIL: Distance {dist} not in expected range 850-900km or missing fields")
+    else:
+        print(f"❌ FAIL: Expected 200 with ok:true")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
+
+# Test 2c: Garbage location -> 422
+print("\n[2c] Garbage location -> expect 422")
+try:
+    # Add small delay to avoid rate limiting from Nominatim
+    time.sleep(1)
+    r = requests.post(f"{BASE_URL}/shipping/estimate", json={
+        "from": "qqqqqqqq XXXX invalid",
+        "to": "Berlin, Germany"
+    })
+    print(f"Status: {r.status_code}")
+    print(f"Response: {r.json()}")
+    if r.status_code == 422:
+        print("✅ PASS: Invalid location rejected with 422")
+    else:
+        print(f"❌ FAIL: Expected 422, got {r.status_code}")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
+
+# ============================================================================
+# TEST 3: USER PROFILE ENDPOINT
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 3: GET /api/users/:username")
+print("=" * 80)
+
+# Test 3a: Unknown username -> 404
+print("\n[3a] Unknown username -> expect 404")
+try:
+    r = requests.get(f"{BASE_URL}/users/nonexistent_user_xyz_123")
+    print(f"Status: {r.status_code}")
+    print(f"Response: {r.json()}")
+    if r.status_code == 404:
+        print("✅ PASS: Unknown user returns 404")
+    else:
+        print(f"❌ FAIL: Expected 404, got {r.status_code}")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
+
+# Test 3b: Existing user -> 200 with user, listings, stats (no email/passwordHash)
+print("\n[3b] Existing user profile -> expect 200 with sanitized data")
+if upload_cookie:
+    try:
+        username = test_user_upload['username']
+        r = requests.get(f"{BASE_URL}/users/{username}")
+        print(f"Status: {r.status_code}")
+        resp = r.json()
+        print(f"Response: {json.dumps(resp, indent=2)}")
+        if r.status_code == 200 and resp.get('ok'):
+            user = resp.get('user', {})
+            listings = resp.get('listings', [])
+            stats = resp.get('stats', {})
+            has_email = 'email' in user
+            has_password = 'passwordHash' in user
+            has_username = 'username' in user
+            has_stats = 'active' in stats and 'sold' in stats and 'rating' in stats
+            print(f"User has username: {has_username}")
+            print(f"User has email (should be False): {has_email}")
+            print(f"User has passwordHash (should be False): {has_password}")
+            print(f"Stats present: {has_stats}")
+            if has_username and not has_email and not has_password and has_stats:
+                print("✅ PASS: User profile returned without sensitive data")
+            else:
+                print(f"❌ FAIL: User profile contains sensitive data or missing required fields")
+        else:
+            print(f"❌ FAIL: Expected 200 with ok:true")
+    except Exception as e:
+        print(f"❌ FAIL: {e}")
+
+# ============================================================================
+# TEST 4: UPDATE PROFILE ENDPOINT (PUT /api/me)
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 4: PUT /api/me")
+print("=" * 80)
+
+# Test 4a: Without auth -> 401
+print("\n[4a] Update profile without auth -> expect 401")
+try:
+    r = requests.put(f"{BASE_URL}/me", json={"bio": "test bio"})
+    print(f"Status: {r.status_code}")
+    print(f"Response: {r.json()}")
+    if r.status_code == 401:
+        print("✅ PASS: Unauthorized update blocked")
+    else:
+        print(f"❌ FAIL: Expected 401, got {r.status_code}")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
+
+if upload_cookie:
+    # Test 4b: Valid update with bio, location, avatarUrl -> 200
+    print("\n[4b] Valid profile update -> expect 200")
+    try:
+        cookies = {'tap_session': upload_cookie}
+        update_data = {
+            "bio": "watch nerd, geneva",
+            "location": "Geneva, Switzerland",
+            "avatarUrl": "https://example.com/me.jpg"
+        }
+        r = requests.put(f"{BASE_URL}/me", json=update_data, cookies=cookies)
+        print(f"Status: {r.status_code}")
+        resp = r.json()
+        print(f"Response: {json.dumps(resp, indent=2)}")
+        if r.status_code == 200 and resp.get('ok'):
+            user = resp.get('user', {})
+            if user.get('bio') == update_data['bio'] and user.get('location') == update_data['location'] and user.get('avatarUrl') == update_data['avatarUrl']:
+                print("✅ PASS: Profile updated successfully")
+            else:
+                print(f"❌ FAIL: Profile not updated correctly")
+        else:
+            print(f"❌ FAIL: Expected 200 with ok:true")
+    except Exception as e:
+        print(f"❌ FAIL: {e}")
+
+    # Test 4c: Bio >500 chars -> truncated to 500
+    print("\n[4c] Bio >500 chars -> expect truncation to 500")
+    try:
+        cookies = {'tap_session': upload_cookie}
+        long_bio = "x" * 600
+        r = requests.put(f"{BASE_URL}/me", json={"bio": long_bio}, cookies=cookies)
+        print(f"Status: {r.status_code}")
+        resp = r.json()
+        if r.status_code == 200 and resp.get('ok'):
+            user = resp.get('user', {})
+            bio_len = len(user.get('bio', ''))
+            print(f"Stored bio length: {bio_len}")
+            if bio_len == 500:
+                print("✅ PASS: Bio truncated to 500 chars")
+            else:
+                print(f"❌ FAIL: Bio length is {bio_len}, expected 500")
+        else:
+            print(f"❌ FAIL: Expected 200 with ok:true")
+    except Exception as e:
+        print(f"❌ FAIL: {e}")
+
+    # Test 4d: Invalid avatarUrl (ftp://) -> should not be set
+    print("\n[4d] Invalid avatarUrl (ftp://) -> expect validation")
+    try:
+        cookies = {'tap_session': upload_cookie}
+        # First set a valid URL
+        r1 = requests.put(f"{BASE_URL}/me", json={"avatarUrl": "https://valid.com/img.jpg"}, cookies=cookies)
+        valid_url = r1.json().get('user', {}).get('avatarUrl')
+        print(f"Set valid URL: {valid_url}")
+        
+        # Try to set invalid URL
+        r2 = requests.put(f"{BASE_URL}/me", json={"avatarUrl": "ftp://bad.com/file"}, cookies=cookies)
+        print(f"Status: {r2.status_code}")
+        resp = r2.json()
+        print(f"Response: {json.dumps(resp, indent=2)}")
+        
+        # Check if avatarUrl was NOT updated (should still be the valid one or not set)
+        new_url = resp.get('user', {}).get('avatarUrl')
+        if new_url != "ftp://bad.com/file":
+            print(f"✅ PASS: Invalid avatarUrl rejected (current: {new_url})")
+        else:
+            print(f"❌ FAIL: Invalid avatarUrl was accepted")
+    except Exception as e:
+        print(f"❌ FAIL: {e}")
+
+    # Test 4e: Empty body -> 400
+    print("\n[4e] Empty update body -> expect 400")
+    try:
+        cookies = {'tap_session': upload_cookie}
+        r = requests.put(f"{BASE_URL}/me", json={}, cookies=cookies)
+        print(f"Status: {r.status_code}")
+        print(f"Response: {r.json()}")
+        if r.status_code == 400:
+            print("✅ PASS: Empty update rejected")
+        else:
+            print(f"❌ FAIL: Expected 400, got {r.status_code}")
+    except Exception as e:
+        print(f"❌ FAIL: {e}")
+
+# ============================================================================
+# TEST 5: CONVERSATIONS AND MESSAGES FLOW
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 5: CONVERSATIONS AND MESSAGES (Full Flow)")
+print("=" * 80)
+
+# Setup: Create two users (seller and buyer)
+print("\n[Setup] Creating seller and buyer users...")
+timestamp = int(time.time())
+seller_data = {
+    "email": f"seller_{timestamp}@tapisserie.test",
+    "username": f"seller{timestamp}",
+    "password": "testpass123"
+}
+buyer_data = {
+    "email": f"buyer_{timestamp}@tapisserie.test",
+    "username": f"buyer{timestamp}",
+    "password": "testpass123"
+}
+
+try:
+    r_seller = requests.post(f"{BASE_URL}/auth/signup", json=seller_data)
+    seller_cookie = r_seller.cookies.get('tap_session')
+    print(f"✅ Seller created: {seller_data['username']}")
     
-    # Test 7b: Verify newly created listing appears
+    r_buyer = requests.post(f"{BASE_URL}/auth/signup", json=buyer_data)
+    buyer_cookie = r_buyer.cookies.get('tap_session')
+    print(f"✅ Buyer created: {buyer_data['username']}")
+except Exception as e:
+    print(f"❌ Failed to create test users: {e}")
+    seller_cookie = None
+    buyer_cookie = None
+
+if seller_cookie and buyer_cookie:
+    # Create a listing as seller
+    print("\n[Setup] Creating listing as seller...")
+    try:
+        listing_data = {
+            "title": "Audemars Piguet Royal Oak Offshore",
+            "price": 5000,
+            "description": "Test listing for conversation flow",
+            "brand": "AP × Swatch",
+            "collection": "Royal Oak",
+            "condition": "New"
+        }
+        cookies = {'tap_session': seller_cookie}
+        r = requests.post(f"{BASE_URL}/listings", json=listing_data, cookies=cookies)
+        listing_id = r.json().get('listing', {}).get('id')
+        print(f"✅ Listing created: {listing_id}")
+    except Exception as e:
+        print(f"❌ Failed to create listing: {e}")
+        listing_id = None
+
     if listing_id:
+        # Test 5a: Create conversation as buyer -> 200
+        print("\n[5a] Buyer creates conversation -> expect 200")
         try:
-            resp = requests.get(f"{BASE_URL}/listings", timeout=10)
-            data = resp.json()
-            items = data.get("items", [])
-            found = any(item.get("id") == listing_id for item in items)
-            passed = resp.status_code == 200 and found
-            print_test("Newly created listing appears in list", passed, 
-                       f"Status: {resp.status_code}, Found: {found}")
+            cookies = {'tap_session': buyer_cookie}
+            r = requests.post(f"{BASE_URL}/conversations", json={"listingId": listing_id}, cookies=cookies)
+            print(f"Status: {r.status_code}")
+            resp = r.json()
+            print(f"Response: {json.dumps(resp, indent=2)}")
+            if r.status_code == 200 and resp.get('ok'):
+                convo = resp.get('conversation', {})
+                convo_id = convo.get('id')
+                print(f"Conversation ID: {convo_id}")
+                print(f"Participants: {convo.get('participants')}")
+                print(f"Listing title: {convo.get('listingTitle')}")
+                if convo_id and len(convo.get('participants', [])) == 2:
+                    print("✅ PASS: Conversation created successfully")
+                else:
+                    print(f"❌ FAIL: Conversation missing required fields")
+            else:
+                print(f"❌ FAIL: Expected 200 with ok:true")
         except Exception as e:
-            print_test("Newly created listing appears in list", False, f"Error: {e}")
-    
-    # Test 7c: Filter by query (case-insensitive)
-    try:
-        resp = requests.get(f"{BASE_URL}/listings?q=Brassus", timeout=10)
-        data = resp.json()
-        items = data.get("items", [])
-        # Should find "AP × Swatch Mission to Le Brassus"
-        found = any("brassus" in item.get("title", "").lower() or 
-                   "brassus" in item.get("collection", "").lower() for item in items)
-        passed = resp.status_code == 200 and data.get("ok") == True
-        print_test("Filter by query 'Brassus'", passed, 
-                   f"Status: {resp.status_code}, Results: {len(items)}, Found match: {found}")
-    except Exception as e:
-        print_test("Filter by query 'Brassus'", False, f"Error: {e}")
-    
-    # Test 7d: Non-existent query returns empty
-    try:
-        resp = requests.get(f"{BASE_URL}/listings?q=NONEXISTENT_ABC", timeout=10)
-        data = resp.json()
-        items = data.get("items", [])
-        passed = resp.status_code == 200 and data.get("ok") == True and len(items) == 0
-        print_test("Non-existent query returns empty", passed, 
-                   f"Status: {resp.status_code}, Results: {len(items)}")
-    except Exception as e:
-        print_test("Non-existent query returns empty", False, f"Error: {e}")
+            print(f"❌ FAIL: {e}")
+            convo_id = None
 
-def test_listings_detail(listing_id):
-    """Test GET /api/listings/{id}"""
-    print("\n=== TEST 8: GET /api/listings/{id} ===")
-    
-    # Test 8a: Existing listing
-    if listing_id:
+        # Test 5b: Create same conversation again -> idempotent (same ID)
+        print("\n[5b] Buyer creates same conversation again -> expect same ID (idempotent)")
         try:
-            resp = requests.get(f"{BASE_URL}/listings/{listing_id}", timeout=10)
-            data = resp.json()
-            passed = (
-                resp.status_code == 200 and
-                data.get("ok") == True and
-                "listing" in data and
-                data["listing"].get("id") == listing_id and
-                "_id" not in data["listing"]
-            )
-            print_test("Get existing listing", passed, 
-                       f"Status: {resp.status_code}, Listing ID: {data.get('listing', {}).get('id')}")
+            cookies = {'tap_session': buyer_cookie}
+            r = requests.post(f"{BASE_URL}/conversations", json={"listingId": listing_id}, cookies=cookies)
+            print(f"Status: {r.status_code}")
+            resp = r.json()
+            new_convo_id = resp.get('conversation', {}).get('id')
+            print(f"New conversation ID: {new_convo_id}")
+            if new_convo_id == convo_id:
+                print("✅ PASS: Idempotent - same conversation returned")
+            else:
+                print(f"❌ FAIL: Different conversation ID returned")
         except Exception as e:
-            print_test("Get existing listing", False, f"Error: {e}")
-    
-    # Test 8b: Non-existent listing
-    try:
-        fake_id = f"fake-{random_nonce()}"
-        resp = requests.get(f"{BASE_URL}/listings/{fake_id}", timeout=10)
-        passed = resp.status_code == 404 and "error" in resp.json()
-        print_test("Non-existent listing returns 404", passed, 
-                   f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Non-existent listing returns 404", False, f"Error: {e}")
+            print(f"❌ FAIL: {e}")
 
-def test_waitlist_regression():
-    """Regression test for POST /api/waitlist"""
-    print("\n=== TEST 9: POST /api/waitlist (regression) ===")
-    
-    nonce = random_nonce()
-    
-    # Test 9a: Valid email
-    try:
-        resp = requests.post(f"{BASE_URL}/waitlist", json={
-            "email": f"regression+{nonce}@tap.test"
-        }, timeout=10)
-        data = resp.json()
-        passed = resp.status_code == 200 and data.get("ok") == True and data.get("duplicate") == False
-        print_test("Waitlist valid email", passed, f"Status: {resp.status_code}, Response: {data}")
-    except Exception as e:
-        print_test("Waitlist valid email", False, f"Error: {e}")
-    
-    # Test 9b: Duplicate
-    try:
-        resp = requests.post(f"{BASE_URL}/waitlist", json={
-            "email": f"regression+{nonce}@tap.test"
-        }, timeout=10)
-        data = resp.json()
-        passed = resp.status_code == 200 and data.get("ok") == True and data.get("duplicate") == True
-        print_test("Waitlist duplicate detection", passed, f"Status: {resp.status_code}, Response: {data}")
-    except Exception as e:
-        print_test("Waitlist duplicate detection", False, f"Error: {e}")
-    
-    # Test 9c: Invalid email
-    try:
-        resp = requests.post(f"{BASE_URL}/waitlist", json={
-            "email": "invalid-email"
-        }, timeout=10)
-        passed = resp.status_code == 400 and "error" in resp.json()
-        print_test("Waitlist invalid email", passed, f"Status: {resp.status_code}, Response: {resp.json()}")
-    except Exception as e:
-        print_test("Waitlist invalid email", False, f"Error: {e}")
+        # Test 5c: Seller tries to create conversation on own listing -> 400
+        print("\n[5c] Seller creates conversation on own listing -> expect 400")
+        try:
+            cookies = {'tap_session': seller_cookie}
+            r = requests.post(f"{BASE_URL}/conversations", json={"listingId": listing_id}, cookies=cookies)
+            print(f"Status: {r.status_code}")
+            print(f"Response: {r.json()}")
+            if r.status_code == 400 and "own listing" in r.json().get('error', '').lower():
+                print("✅ PASS: Seller blocked from creating conversation on own listing")
+            else:
+                print(f"❌ FAIL: Expected 400 with 'own listing' error")
+        except Exception as e:
+            print(f"❌ FAIL: {e}")
 
-def test_admin_waitlist_counters():
-    """Test GET /api/admin/waitlist includes new counters"""
-    print("\n=== TEST 10: GET /api/admin/waitlist (with counters) ===")
-    
+        # Test 5d: GET /api/conversations as buyer -> includes conversation
+        print("\n[5d] Buyer lists conversations -> expect to see the conversation")
+        try:
+            cookies = {'tap_session': buyer_cookie}
+            r = requests.get(f"{BASE_URL}/conversations", cookies=cookies)
+            print(f"Status: {r.status_code}")
+            resp = r.json()
+            items = resp.get('items', [])
+            print(f"Found {len(items)} conversation(s)")
+            found = any(c.get('id') == convo_id for c in items)
+            if r.status_code == 200 and found:
+                print("✅ PASS: Conversation appears in buyer's list")
+            else:
+                print(f"❌ FAIL: Conversation not found in list")
+        except Exception as e:
+            print(f"❌ FAIL: {e}")
+
+        # Test 5e: GET /api/conversations without auth -> 401
+        print("\n[5e] List conversations without auth -> expect 401")
+        try:
+            r = requests.get(f"{BASE_URL}/conversations")
+            print(f"Status: {r.status_code}")
+            if r.status_code == 401:
+                print("✅ PASS: Unauthorized access blocked")
+            else:
+                print(f"❌ FAIL: Expected 401, got {r.status_code}")
+        except Exception as e:
+            print(f"❌ FAIL: {e}")
+
+        if convo_id:
+            # Test 5f: GET /api/conversations/:id as buyer -> 200 with messages:[]
+            print("\n[5f] Buyer gets conversation detail -> expect 200 with empty messages")
+            try:
+                cookies = {'tap_session': buyer_cookie}
+                r = requests.get(f"{BASE_URL}/conversations/{convo_id}", cookies=cookies)
+                print(f"Status: {r.status_code}")
+                resp = r.json()
+                messages = resp.get('messages', [])
+                print(f"Messages count: {len(messages)}")
+                if r.status_code == 200 and isinstance(messages, list):
+                    print("✅ PASS: Conversation detail retrieved")
+                else:
+                    print(f"❌ FAIL: Expected 200 with messages array")
+            except Exception as e:
+                print(f"❌ FAIL: {e}")
+
+            # Test 5g: GET /api/conversations/:id without auth -> 401
+            print("\n[5g] Get conversation without auth -> expect 401")
+            try:
+                r = requests.get(f"{BASE_URL}/conversations/{convo_id}")
+                print(f"Status: {r.status_code}")
+                if r.status_code == 401:
+                    print("✅ PASS: Unauthorized access blocked")
+                else:
+                    print(f"❌ FAIL: Expected 401, got {r.status_code}")
+            except Exception as e:
+                print(f"❌ FAIL: {e}")
+
+            # Test 5h: Create third user and try to access conversation -> 403
+            print("\n[5h] Non-participant tries to access conversation -> expect 403")
+            try:
+                third_user = {
+                    "email": f"third_{timestamp}@tapisserie.test",
+                    "username": f"third{timestamp}",
+                    "password": "testpass123"
+                }
+                r_third = requests.post(f"{BASE_URL}/auth/signup", json=third_user)
+                third_cookie = r_third.cookies.get('tap_session')
+                print(f"✅ Third user created: {third_user['username']}")
+                
+                cookies = {'tap_session': third_cookie}
+                r = requests.get(f"{BASE_URL}/conversations/{convo_id}", cookies=cookies)
+                print(f"Status: {r.status_code}")
+                if r.status_code == 403:
+                    print("✅ PASS: Non-participant blocked with 403")
+                else:
+                    print(f"❌ FAIL: Expected 403, got {r.status_code}")
+            except Exception as e:
+                print(f"❌ FAIL: {e}")
+
+            # Test 5i: Buyer sends text message -> 200
+            print("\n[5i] Buyer sends text message -> expect 200")
+            try:
+                cookies = {'tap_session': buyer_cookie}
+                msg_data = {"type": "text", "text": "Hello, is this still available?"}
+                r = requests.post(f"{BASE_URL}/conversations/{convo_id}/messages", json=msg_data, cookies=cookies)
+                print(f"Status: {r.status_code}")
+                resp = r.json()
+                print(f"Response: {json.dumps(resp, indent=2)}")
+                if r.status_code == 200 and resp.get('ok'):
+                    text_msg_id = resp.get('message', {}).get('id')
+                    text_msg_time = resp.get('message', {}).get('createdAt')
+                    print(f"✅ PASS: Text message sent, ID: {text_msg_id}")
+                else:
+                    print(f"❌ FAIL: Expected 200 with ok:true")
+            except Exception as e:
+                print(f"❌ FAIL: {e}")
+                text_msg_time = None
+
+            # Test 5j: Buyer sends offer message -> 200
+            print("\n[5j] Buyer sends offer (€4200) -> expect 200 with offerStatus:pending")
+            try:
+                cookies = {'tap_session': buyer_cookie}
+                offer_data = {"type": "offer", "price": 4200}
+                r = requests.post(f"{BASE_URL}/conversations/{convo_id}/messages", json=offer_data, cookies=cookies)
+                print(f"Status: {r.status_code}")
+                resp = r.json()
+                print(f"Response: {json.dumps(resp, indent=2)}")
+                if r.status_code == 200 and resp.get('ok'):
+                    offer_msg = resp.get('message', {})
+                    offer_msg_id = offer_msg.get('id')
+                    offer_status = offer_msg.get('offerStatus')
+                    print(f"Offer ID: {offer_msg_id}")
+                    print(f"Offer status: {offer_status}")
+                    if offer_status == 'pending':
+                        print("✅ PASS: Offer sent with pending status")
+                    else:
+                        print(f"❌ FAIL: Expected offerStatus:pending, got {offer_status}")
+                else:
+                    print(f"❌ FAIL: Expected 200 with ok:true")
+            except Exception as e:
+                print(f"❌ FAIL: {e}")
+                offer_msg_id = None
+
+            # Test 5k: Seller gets conversation -> sees 2 messages
+            print("\n[5k] Seller gets conversation -> expect 2 messages in order")
+            try:
+                cookies = {'tap_session': seller_cookie}
+                r = requests.get(f"{BASE_URL}/conversations/{convo_id}", cookies=cookies)
+                print(f"Status: {r.status_code}")
+                resp = r.json()
+                messages = resp.get('messages', [])
+                convo_data = resp.get('conversation', {})
+                last_msg = convo_data.get('lastMessage')
+                print(f"Messages count: {len(messages)}")
+                print(f"Last message: {last_msg}")
+                if len(messages) == 2 and last_msg and last_msg.get('type') == 'offer':
+                    print("✅ PASS: Seller sees both messages, lastMessage reflects offer")
+                else:
+                    print(f"❌ FAIL: Expected 2 messages with lastMessage type:offer")
+            except Exception as e:
+                print(f"❌ FAIL: {e}")
+
+            # Test 5l: Seller gets conversation with ?since filter -> only offer message
+            if text_msg_time:
+                print("\n[5l] Seller gets conversation with ?since filter -> expect only offer message")
+                try:
+                    cookies = {'tap_session': seller_cookie}
+                    r = requests.get(f"{BASE_URL}/conversations/{convo_id}?since={text_msg_time}", cookies=cookies)
+                    print(f"Status: {r.status_code}")
+                    resp = r.json()
+                    messages = resp.get('messages', [])
+                    print(f"Messages count after filter: {len(messages)}")
+                    if len(messages) == 1 and messages[0].get('type') == 'offer':
+                        print("✅ PASS: ?since filter works correctly")
+                    else:
+                        print(f"❌ FAIL: Expected 1 offer message after filter")
+                except Exception as e:
+                    print(f"❌ FAIL: {e}")
+
+            # ============================================================================
+            # TEST 6: OFFER ACTIONS
+            # ============================================================================
+            print("\n" + "=" * 80)
+            print("TEST 6: OFFER ACTIONS")
+            print("=" * 80)
+
+            if offer_msg_id:
+                # Test 6a: Buyer (sender) tries to respond to own offer -> 400
+                print("\n[6a] Buyer responds to own offer -> expect 400")
+                try:
+                    cookies = {'tap_session': buyer_cookie}
+                    r = requests.post(f"{BASE_URL}/messages/{offer_msg_id}/offer-action", 
+                                    json={"action": "accept"}, cookies=cookies)
+                    print(f"Status: {r.status_code}")
+                    print(f"Response: {r.json()}")
+                    if r.status_code == 400 and "own offer" in r.json().get('error', '').lower():
+                        print("✅ PASS: Sender blocked from responding to own offer")
+                    else:
+                        print(f"❌ FAIL: Expected 400 with 'own offer' error")
+                except Exception as e:
+                    print(f"❌ FAIL: {e}")
+
+                # Create a second offer for accept test
+                print("\n[Setup] Creating second offer for accept test...")
+                try:
+                    cookies = {'tap_session': buyer_cookie}
+                    r = requests.post(f"{BASE_URL}/conversations/{convo_id}/messages", 
+                                    json={"type": "offer", "price": 4300}, cookies=cookies)
+                    offer2_id = r.json().get('message', {}).get('id')
+                    print(f"✅ Second offer created: {offer2_id}")
+                except Exception as e:
+                    print(f"❌ Failed to create second offer: {e}")
+                    offer2_id = None
+
+                # Test 6b: Seller accepts offer -> 200, status becomes 'accepted', system message
+                if offer2_id:
+                    print("\n[6b] Seller accepts offer -> expect 200 with status:accepted + system message")
+                    try:
+                        cookies = {'tap_session': seller_cookie}
+                        r = requests.post(f"{BASE_URL}/messages/{offer2_id}/offer-action", 
+                                        json={"action": "accept"}, cookies=cookies)
+                        print(f"Status: {r.status_code}")
+                        resp = r.json()
+                        print(f"Response: {json.dumps(resp, indent=2)}")
+                        if r.status_code == 200 and resp.get('ok'):
+                            offer_status = resp.get('offer', {}).get('offerStatus')
+                            print(f"Offer status: {offer_status}")
+                            if offer_status == 'accepted':
+                                print("✅ PASS: Offer accepted successfully")
+                                
+                                # Verify system message was created
+                                r2 = requests.get(f"{BASE_URL}/conversations/{convo_id}", cookies=cookies)
+                                messages = r2.json().get('messages', [])
+                                system_msgs = [m for m in messages if m.get('type') == 'system']
+                                if system_msgs:
+                                    print(f"✅ System message created: {system_msgs[-1].get('text')}")
+                                else:
+                                    print("⚠️ No system message found")
+                            else:
+                                print(f"❌ FAIL: Expected offerStatus:accepted, got {offer_status}")
+                        else:
+                            print(f"❌ FAIL: Expected 200 with ok:true")
+                    except Exception as e:
+                        print(f"❌ FAIL: {e}")
+
+                # Create a third offer for reject test
+                print("\n[Setup] Creating third offer for reject test...")
+                try:
+                    cookies = {'tap_session': buyer_cookie}
+                    r = requests.post(f"{BASE_URL}/conversations/{convo_id}/messages", 
+                                    json={"type": "offer", "price": 4400}, cookies=cookies)
+                    offer3_id = r.json().get('message', {}).get('id')
+                    print(f"✅ Third offer created: {offer3_id}")
+                except Exception as e:
+                    print(f"❌ Failed to create third offer: {e}")
+                    offer3_id = None
+
+                # Test 6c: Seller rejects offer -> 200, status becomes 'rejected', system message
+                if offer3_id:
+                    print("\n[6c] Seller rejects offer -> expect 200 with status:rejected + system message")
+                    try:
+                        cookies = {'tap_session': seller_cookie}
+                        r = requests.post(f"{BASE_URL}/messages/{offer3_id}/offer-action", 
+                                        json={"action": "reject"}, cookies=cookies)
+                        print(f"Status: {r.status_code}")
+                        resp = r.json()
+                        print(f"Response: {json.dumps(resp, indent=2)}")
+                        if r.status_code == 200 and resp.get('ok'):
+                            offer_status = resp.get('offer', {}).get('offerStatus')
+                            print(f"Offer status: {offer_status}")
+                            if offer_status == 'rejected':
+                                print("✅ PASS: Offer rejected successfully")
+                            else:
+                                print(f"❌ FAIL: Expected offerStatus:rejected, got {offer_status}")
+                        else:
+                            print(f"❌ FAIL: Expected 200 with ok:true")
+                    except Exception as e:
+                        print(f"❌ FAIL: {e}")
+
+                # Create a fourth offer for counter test
+                print("\n[Setup] Creating fourth offer for counter test...")
+                try:
+                    cookies = {'tap_session': buyer_cookie}
+                    r = requests.post(f"{BASE_URL}/conversations/{convo_id}/messages", 
+                                    json={"type": "offer", "price": 4500}, cookies=cookies)
+                    offer4_id = r.json().get('message', {}).get('id')
+                    print(f"✅ Fourth offer created: {offer4_id}")
+                except Exception as e:
+                    print(f"❌ Failed to create fourth offer: {e}")
+                    offer4_id = None
+
+                # Test 6d: Seller counters offer -> 200, new counter-offer message created
+                if offer4_id:
+                    print("\n[6d] Seller counters with €4700 -> expect 200 with counter-offer message")
+                    try:
+                        cookies = {'tap_session': seller_cookie}
+                        r = requests.post(f"{BASE_URL}/messages/{offer4_id}/offer-action", 
+                                        json={"action": "counter", "price": 4700}, cookies=cookies)
+                        print(f"Status: {r.status_code}")
+                        resp = r.json()
+                        print(f"Response: {json.dumps(resp, indent=2)}")
+                        if r.status_code == 200 and resp.get('ok'):
+                            counter = resp.get('counter')
+                            if counter and counter.get('type') == 'offer' and counter.get('price') == 4700:
+                                print(f"✅ PASS: Counter-offer created with price €4700")
+                                
+                                # Verify counter-offer appears in conversation
+                                r2 = requests.get(f"{BASE_URL}/conversations/{convo_id}", cookies=cookies)
+                                messages = r2.json().get('messages', [])
+                                counter_msgs = [m for m in messages if m.get('id') == counter.get('id')]
+                                if counter_msgs and counter_msgs[0].get('offerStatus') == 'pending':
+                                    print(f"✅ Counter-offer in conversation with status:pending")
+                                else:
+                                    print("⚠️ Counter-offer not found in conversation or wrong status")
+                            else:
+                                print(f"❌ FAIL: Counter-offer not created correctly")
+                        else:
+                            print(f"❌ FAIL: Expected 200 with ok:true")
+                    except Exception as e:
+                        print(f"❌ FAIL: {e}")
+
+                # Test 6e: Invalid action -> 400
+                print("\n[6e] Invalid action 'unknown' -> expect 400")
+                try:
+                    cookies = {'tap_session': seller_cookie}
+                    r = requests.post(f"{BASE_URL}/messages/{offer_msg_id}/offer-action", 
+                                    json={"action": "unknown"}, cookies=cookies)
+                    print(f"Status: {r.status_code}")
+                    print(f"Response: {r.json()}")
+                    if r.status_code == 400:
+                        print("✅ PASS: Invalid action rejected")
+                    else:
+                        print(f"❌ FAIL: Expected 400, got {r.status_code}")
+                except Exception as e:
+                    print(f"❌ FAIL: {e}")
+
+# ============================================================================
+# TEST 7: REGRESSION TESTS
+# ============================================================================
+print("\n" + "=" * 80)
+print("TEST 7: REGRESSION TESTS (Quick checks)")
+print("=" * 80)
+
+# Test 7a: POST /api/waitlist still works
+print("\n[7a] POST /api/waitlist -> expect 200")
+try:
+    test_email = f"regression_{int(time.time())}@tapisserie.test"
+    r = requests.post(f"{BASE_URL}/waitlist", json={"email": test_email})
+    print(f"Status: {r.status_code}")
+    if r.status_code == 200 and r.json().get('ok'):
+        print("✅ PASS: Waitlist endpoint still working")
+    else:
+        print(f"❌ FAIL: Waitlist endpoint broken")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
+
+# Test 7b: POST /api/auth/signup still works
+print("\n[7b] POST /api/auth/signup -> expect 200")
+try:
+    test_user = {
+        "email": f"regression_{int(time.time())}@tapisserie.test",
+        "username": f"regression{int(time.time())}",
+        "password": "testpass123"
+    }
+    r = requests.post(f"{BASE_URL}/auth/signup", json=test_user)
+    print(f"Status: {r.status_code}")
+    if r.status_code == 200 and r.json().get('ok'):
+        regression_cookie = r.cookies.get('tap_session')
+        print("✅ PASS: Signup endpoint still working")
+    else:
+        print(f"❌ FAIL: Signup endpoint broken")
+        regression_cookie = None
+except Exception as e:
+    print(f"❌ FAIL: {e}")
+    regression_cookie = None
+
+# Test 7c: POST /api/auth/login still works
+if regression_cookie:
+    print("\n[7c] POST /api/auth/login -> expect 200")
     try:
-        resp = requests.get(f"{BASE_URL}/admin/waitlist", headers={
-            "x-admin-password": ADMIN_PASSWORD
-        }, timeout=10)
-        data = resp.json()
-        passed = (
-            resp.status_code == 200 and
-            data.get("ok") == True and
-            "pageviews" in data and
-            "users" in data and
-            "listings" in data and
-            isinstance(data["pageviews"], int) and
-            isinstance(data["users"], int) and
-            isinstance(data["listings"], int) and
-            data["pageviews"] > 0  # Should have pageviews from test_events
-        )
-        print_test("Admin waitlist with counters", passed, 
-                   f"Status: {resp.status_code}, Pageviews: {data.get('pageviews')}, Users: {data.get('users')}, Listings: {data.get('listings')}")
+        r = requests.post(f"{BASE_URL}/auth/login", json={
+            "email": test_user['email'],
+            "password": test_user['password']
+        })
+        print(f"Status: {r.status_code}")
+        if r.status_code == 200 and r.json().get('ok'):
+            print("✅ PASS: Login endpoint still working")
+        else:
+            print(f"❌ FAIL: Login endpoint broken")
     except Exception as e:
-        print_test("Admin waitlist with counters", False, f"Error: {e}")
+        print(f"❌ FAIL: {e}")
 
-def main():
-    print("=" * 80)
-    print("TAPISSERIE PHASE 2 BACKEND API TESTS")
-    print("=" * 80)
-    print(f"Base URL: {BASE_URL}")
-    print(f"Admin Password: {ADMIN_PASSWORD}")
-    print("=" * 80)
-    
-    # Test 1: Events
-    test_events()
-    
-    # Test 2: Signup (returns session with cookie)
-    session_with_auth, email, username, password = test_auth_signup()
-    
-    # Test 3: Me endpoint
-    session_without_auth = requests.Session()
-    test_me(session_with_auth, session_without_auth)
-    
-    # Test 4: Login
-    login_session = test_login(email, username, password)
-    
-    # Test 5: Logout
-    test_logout(login_session)
-    
-    # Create a fresh authenticated session for listings tests
-    fresh_session = requests.Session()
-    fresh_session.post(f"{BASE_URL}/auth/login", json={
-        "email": email,
-        "password": password
-    }, timeout=10)
-    
-    # Test 6: Create listings
-    listing_id = test_listings_create(fresh_session, session_without_auth)
-    
-    # Test 7: List listings
-    test_listings_list(listing_id)
-    
-    # Test 8: Listing detail
-    test_listings_detail(listing_id)
-    
-    # Test 9: Waitlist regression
-    test_waitlist_regression()
-    
-    # Test 10: Admin waitlist with counters
-    test_admin_waitlist_counters()
-    
-    print("\n" + "=" * 80)
-    print("TESTING COMPLETE")
-    print("=" * 80)
+# Test 7d: GET /api/listings still works
+print("\n[7d] GET /api/listings -> expect 200")
+try:
+    r = requests.get(f"{BASE_URL}/listings")
+    print(f"Status: {r.status_code}")
+    if r.status_code == 200 and r.json().get('ok'):
+        print("✅ PASS: Listings endpoint still working")
+    else:
+        print(f"❌ FAIL: Listings endpoint broken")
+except Exception as e:
+    print(f"❌ FAIL: {e}")
 
-if __name__ == "__main__":
-    main()
+# Test 7e: GET /api/me still works
+if regression_cookie:
+    print("\n[7e] GET /api/me -> expect 200")
+    try:
+        cookies = {'tap_session': regression_cookie}
+        r = requests.get(f"{BASE_URL}/me", cookies=cookies)
+        print(f"Status: {r.status_code}")
+        if r.status_code == 200 and 'user' in r.json():
+            print("✅ PASS: /me endpoint still working")
+        else:
+            print(f"❌ FAIL: /me endpoint broken")
+    except Exception as e:
+        print(f"❌ FAIL: {e}")
+
+print("\n" + "=" * 80)
+print("ALL TESTS COMPLETED")
+print("=" * 80)

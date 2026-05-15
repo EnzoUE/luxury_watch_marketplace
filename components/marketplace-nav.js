@@ -37,6 +37,7 @@ export default function MarketplaceNav({ active }) {
         <div className="flex items-center gap-6">
           <a href="/listings" className={linkCls('browse')}>Browse</a>
           {user && <a href="/sell" className={linkCls('sell')}>Sell</a>}
+          {user && <a href="/messages" className={linkCls('messages')}>Messages</a>}
           {loaded && !user && (
             <>
               <a href="/login" className={linkCls('login')}>Sign in</a>
@@ -47,7 +48,7 @@ export default function MarketplaceNav({ active }) {
           )}
           {user && (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-white hidden sm:inline">@{user.username}</span>
+              <a href={`/u/${user.username}`} className="text-sm text-white hover:text-[#d4b896] transition hidden sm:inline">@{user.username}</a>
               <Button size="sm" variant="outline" onClick={logout} className="border-white/10 rounded-sm">Sign out</Button>
             </div>
           )}
