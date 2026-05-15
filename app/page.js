@@ -34,8 +34,11 @@ const FEAT_IMG_3 = 'https://images.unsplash.com/photo-1600003014608-c2ccc1570a65
 const RELEASE_DATE = new Date('2026-05-16T08:00:00Z').getTime()
 
 function useCountdown(target) {
-  const [now, setNow] = useState(() => Date.now())
+  // Initialize to `target` so initial diff is 0 -> server and client render identical HTML.
+  // After mount, switch to real Date.now() and tick every second.
+  const [now, setNow] = useState(target)
   useEffect(() => {
+    setNow(Date.now())
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])

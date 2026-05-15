@@ -174,6 +174,12 @@ frontend:
       - working: true
         agent: "testing"
         comment: "✅ Comprehensive UI testing completed (8 tests, 7 passed). DESKTOP: Nav with TAPISSERIE brand + CTA button ✓. Hero with correct headline ('Marketplace for the new AP × Swatch'), subheadline ('Buy, sell and trade'), email input (type=email), submit button, and launch badge ✓. All sections present in correct order: Hero → PressStrip (6/6 press names visible) → HowItWorks (4/4 steps) → Features (4+ cards including required titles) → Testimonials (3/3 quote cards) → Countdown (4/4 boxes with May 16, 2026 heading) → FAQ (6 items, expandable) → Footer (copyright text) ✓. EMAIL CAPTURE: Valid email shows success block 'You're on the list.' with toast ✓. Duplicate email shows success block with 'already on the list' toast ✓. Invalid email blocked by HTML5 validation ✓. MOBILE (390x844): Hero, email input, CTA, and nav all visible and reachable ✓. Minor: React hydration error in Countdown component due to SSR/client time mismatch (countdown ticks between server render and client hydration). This causes a red error toast on page load but does NOT break functionality - page works perfectly. This is a known Next.js SSR pattern issue with dynamic timers."
+      - working: true
+        agent: "main"
+        comment: "HYDRATION FIX: Modified useCountdown hook in /app/app/page.js (lines 36-44) to initialize useState(target) instead of useState(() => Date.now()). This ensures server and client render identical HTML initially (diff = 0), then useEffect kicks in after mount to start the real timer. This eliminates the SSR/client mismatch that was causing hydration errors."
+      - working: true
+        agent: "testing"
+        comment: "✅ HYDRATION FIX VERIFIED SUCCESSFULLY. Focused regression test completed at viewport 1920x800. CRITICAL TESTS ALL PASSED: (1) No 'Hydration failed' or 'Text content does not match server-rendered HTML' errors in browser console on initial load ✓. (2) No hydration errors after page reload ✓. (3) No red sonner error toast visible on screen ✓. (4) Countdown component showing actual ticking values after 3 seconds: 01 Days, 03 Hours, 30 Minutes, 17 Seconds - useEffect working correctly ✓. Console log shows only React DevTools info message, no errors. The useState(target) initialization fix completely resolved the hydration mismatch. Page renders correctly on both initial load and reload. Countdown timer starts from 0 diff on server/client, then transitions smoothly to real values after mount."
 
   - task: "Admin dashboard"
     implemented: true
@@ -300,3 +306,32 @@ agent_communication:
       ✓ Mobile responsive design working
       
       Phase 1 is PRODUCTION-READY with one minor cosmetic issue (hydration error toast).
+  
+  - agent: "testing"
+    message: |
+      ✅ HYDRATION FIX REGRESSION TEST COMPLETE - ALL TESTS PASSED
+      
+      Focused regression test for countdown hydration fix completed successfully.
+      Base URL: https://chronoluxe-trade.preview.emergentagent.com/
+      Viewport: 1920x800
+      
+      CRITICAL TESTS (4/4 PASSED):
+      ✅ No hydration errors in browser console on initial page load
+      ✅ No hydration errors after page reload
+      ✅ No red sonner error toast visible on screen
+      ✅ Countdown showing actual ticking values after 3 seconds (01 Days, 03 Hours, 30 Minutes, 17 Seconds)
+      
+      VERIFICATION DETAILS:
+      • Console logs captured: Only React DevTools info message, no errors
+      • No "Hydration failed" or "Text content does not match server-rendered HTML" errors detected
+      • Countdown component correctly initializes with useState(target) so server and client render identical HTML (diff = 0)
+      • useEffect kicks in after mount to start real timer with Date.now()
+      • Countdown transitions smoothly from initial state to live ticking values
+      • Page reload does not trigger any hydration errors
+      
+      FIX VERIFICATION:
+      The useState(target) initialization in /app/app/page.js lines 36-44 completely resolved the hydration mismatch.
+      The previous issue (red error toast on page load) is now eliminated.
+      
+      CONCLUSION:
+      Hydration fix is working perfectly. Landing page is production-ready with no hydration issues.
