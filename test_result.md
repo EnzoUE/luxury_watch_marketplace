@@ -202,6 +202,55 @@ backend:
         comment: "✅ All Phase 2 Listings tests passed (17/17). CREATE (10 tests): POST /api/listings without auth returns 401 ✓. Valid listing with all fields (title, price:4850, description, collection, reference, year, condition, location, boxIncluded, papersIncluded, images) returns 200 {ok:true, listing:{...}} with correct price, currency:'EUR', status:'active', sellerUsername, createdAt ✓. Missing title returns 400 ✓. Title length 2 returns 400 ✓. Price 0 returns 400 ✓. Negative price returns 400 ✓. Non-numeric price returns 400 ✓. Passing 10 image URLs correctly stores only 8 (max enforced) ✓. Non-http URLs (ftp://) correctly filtered out, only http(s) URLs stored ✓. Description >4000 chars correctly truncated to exactly 4000 ✓. LIST (4 tests): GET /api/listings returns 200 {ok:true, items:[...]} sorted by createdAt desc ✓. Newly created listing appears in items array ✓. Query filter ?q=Brassus returns matching results (case-insensitive search on title/brand/collection) ✓. Query ?q=NONEXISTENT_ABC returns empty items:[] ✓. DETAIL (2 tests): GET /api/listings/{id} with valid ID returns 200 {ok:true, listing:{...}} without _id field ✓. Unknown/fake ID returns 404 {error} ✓. All validation rules, filtering, sorting, and data sanitization working correctly."
 
 
+  - task: "Activity feed (live ticker)"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/activity returns up to 25 recent events sorted desc. Activity records are auto-written when a listing is created (type 'new_listing') and when an offer message is sent (type 'new_offer'). If fewer than 6 real events exist, the API also returns 8 synthetic demo events (Pop Blue/Black/Silver/etc.) so the landing-page ticker is never empty. Smoke tested: returns 8 items on a fresh DB. LiveTicker component on landing polls every 12s."
+
+  - task: "Secure shipping tiers"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/shipping/calculate {declaredValue} returns 3 fixed tiers: standard (€19, insured up to €1000), premium (€39, insured up to €5000), express (€89, insured up to €25000). 'recommended' chosen by declared value bracket. 'eligible' marks tiers below declared value as false (UI greys them out). Smoke tested: €920 -> standard recommended, all eligible; €15000 -> express recommended, standard+premium ineligible. Distance-based /api/shipping/estimate kept as deprecated/legacy."
+
+  - task: "Waitlist social proof counter"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/waitlist/social-proof returns {ok:true, displayed, real}. displayed = max(500, real+500) so the landing hero always shows '500+ collectors' minimum while growing with real signups. Used by Hero copy."
+
+  - task: "Listing verification photo requirement"
+    implemented: true
+    working: "NA"
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/listings now REQUIRES verifiedPhotoUrl (string starting with http or /uploads/). Missing -> 400 with explanatory message. When present, the listing is stored with isVerifiedPhoto=true and verifiedPhotoUrl field. Smoke tested: omitted = 400, present = 200 with isVerifiedPhoto true. Existing listings created before this change continue to work (browse page treats missing isVerifiedPhoto as not verified; no badge shown)."
+
+
   - task: "Image upload (multipart, disk-backed)"
     implemented: true
     working: true

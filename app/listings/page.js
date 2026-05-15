@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import MarketplaceNav from '@/components/marketplace-nav'
+import VerifiedBadge from '@/components/verified-badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Search, Plus } from 'lucide-react'
@@ -82,6 +83,11 @@ function App() {
                   {l.condition && (
                     <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 backdrop-blur border border-white/10 text-[10px] tracking-wider text-white/80 uppercase rounded-sm">
                       {l.condition}
+                    </div>
+                  )}
+                  {l.isVerifiedPhoto && (
+                    <div className="absolute top-2 right-2">
+                      <VerifiedBadge size="sm" />
                     </div>
                   )}
                 </div>

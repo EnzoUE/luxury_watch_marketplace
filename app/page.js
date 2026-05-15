@@ -13,6 +13,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { toast } from 'sonner'
+import LiveTicker from '@/components/live-ticker'
 import {
   ShieldCheck,
   Handshake,
@@ -24,6 +25,10 @@ import {
   ArrowRight,
   Sparkles,
   Clock,
+  Watch,
+  Briefcase,
+  Gem,
+  Layers,
 } from 'lucide-react'
 
 const HERO_IMG = 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?w=1600&q=80&auto=format&fit=crop'
@@ -247,6 +252,12 @@ function EmailForm({ size = 'lg', referrer }) {
 }
 
 function Hero() {
+  const [waitlistCount, setWaitlistCount] = useState(500)
+  useEffect(() => {
+    fetch('/api/waitlist/social-proof').then((r) => r.json()).then((d) => {
+      if (d.ok && d.displayed) setWaitlistCount(d.displayed)
+    }).catch(() => {})
+  }, [])
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden noise-bg">
       <div className="absolute inset-0 grid-bg opacity-40"></div>
@@ -257,21 +268,23 @@ function Hero() {
       </div>
       <div className="relative z-10 max-w-7xl mx-auto px-6 pt-32 pb-20 w-full">
         <div className="max-w-2xl animate-fade-up">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 border border-[#d4b896]/30 bg-black/40 backdrop-blur rounded-sm mb-8">
-            <Sparkles className="w-3.5 h-3.5 text-[#d4b896]" />
-            <span className="text-xs tracking-[0.2em] text-[#d4b896] uppercase">Launching May 16, 2026</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 border border-[#d4b896]/30 bg-black/40 backdrop-blur rounded-sm mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs tracking-[0.2em] text-[#d4b896] uppercase">Private beta opens May 16, 2026 · Collector spots limited</span>
           </div>
           <h1 className="font-serif text-5xl sm:text-6xl md:text-7xl leading-[1.05] text-white text-balance mb-6">
-            The Marketplace for the new <span className="gold-gradient italic">AP × Swatch</span> Collection.
+            Don’t miss the drop. <span className="gold-gradient italic">Secure</span> your AP × Swatch without the line.
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground mb-10 max-w-xl leading-relaxed">
-            Buy, sell and trade the upcoming AP × Swatch watches securely. Verified sellers, escrow-ready payments, and a community built for collectors.
+            Join <span className="text-white font-medium">{waitlistCount.toLocaleString()}+ collectors</span> waiting for the Royal Pop marketplace. Early members get <span className="text-[#d4b896] font-medium">0% selling fees for the first 48 hours</span>.
           </p>
           <div id="cta" className="space-y-4">
             <EmailForm referrer="hero" />
-            <p className="text-xs text-muted-foreground/70 text-center sm:text-left">
-              Join 1,000+ collectors. No spam — just the drop notification.
-            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground/80">
+              <span className="flex items-center gap-1.5"><BadgeCheck className="w-3 h-3 text-[#d4b896]" /> Verified collectors only</span>
+              <span className="hidden sm:inline text-white/20">·</span>
+              <span>No spam — drop notification only</span>
+            </div>
           </div>
         </div>
       </div>
@@ -512,6 +525,50 @@ function StickyCTA({ visible }) {
   )
 }
 
+function CrossSell() {
+  const items = [
+    { icon: Layers, name: 'Rubber Straps', desc: 'Tropical-style FKM rubber, custom-fit for Bioceramic cases.' },
+    { icon: Watch, name: 'Leather Straps', desc: 'Hand-stitched calfskin and full-grain leather in collector tones.' },
+    { icon: Gem, name: 'Titanium Clasps', desc: 'Micro-adjust deployant clasps, brushed grade-5 titanium.' },
+    { icon: Briefcase, name: 'Travel Cases', desc: 'Single-watch and two-watch travel rolls, premium leather lined.' },
+  ]
+  return (
+    <section className="relative py-32 px-6 border-t border-white/5">
+      <div className="max-w-7xl mx-auto">
+        <FadeIn>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-12">
+            <div className="max-w-xl">
+              <div className="text-xs tracking-[0.3em] text-[#d4b896] uppercase mb-4">Curated accessories</div>
+              <h2 className="font-serif text-4xl sm:text-5xl text-white mb-3">Upgrade your Royal Pop.</h2>
+              <p className="text-muted-foreground text-lg">Exclusive accessories curated for AP × Swatch collectors.</p>
+            </div>
+            <span className="text-xs tracking-[0.3em] text-muted-foreground uppercase">Coming soon</span>
+          </div>
+        </FadeIn>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/5">
+          {items.map((it, i) => (
+            <FadeIn key={it.name} delay={(i % 4) * 0.08}>
+              <div className="bg-black h-full p-6 group flex flex-col">
+                <div className="aspect-[4/3] rounded-sm mb-5 bg-gradient-to-br from-white/[0.04] to-white/[0.01] border border-white/5 flex items-center justify-center relative overflow-hidden">
+                  <it.icon className="w-10 h-10 text-[#d4b896]/70 group-hover:text-[#d4b896] group-hover:scale-110 transition" strokeWidth={1.1} />
+                  <div className="absolute top-2 right-2 text-[9px] tracking-[0.25em] uppercase bg-[#d4b896]/10 text-[#d4b896] border border-[#d4b896]/20 px-2 py-0.5 rounded-sm">
+                    Coming soon
+                  </div>
+                </div>
+                <div className="font-serif text-xl text-white mb-2">{it.name}</div>
+                <p className="text-sm text-muted-foreground leading-relaxed flex-1">{it.desc}</p>
+                <button className="text-xs text-[#d4b896]/70 hover:text-[#d4b896] tracking-wider uppercase mt-4 text-left transition" disabled>
+                  Notify me →
+                </button>
+              </div>
+            </FadeIn>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function App() {
   const [showSticky, setShowSticky] = useState(false)
 
@@ -548,10 +605,12 @@ function App() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
       <Nav />
       <Hero />
+      <LiveTicker />
       <PressStrip />
       <HowItWorks />
       <FeaturedRefs />
       <Features />
+      <CrossSell />
       <Testimonials />
       <Countdown />
       <FAQ />

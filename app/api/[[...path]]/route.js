@@ -294,6 +294,12 @@ async function handler(request, { params }) {
       if (!title || title.length < 3) return json({ error: 'Title required (min 3 chars).' }, 400)
       if (!Number.isFinite(price) || price <= 0) return json({ error: 'Valid price required.' }, 400)
       const images = Array.isArray(body.images) ? body.images.filter((u) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('/uploads/'))).slice(0, 8) : []
+      const verifiedPhotoUrl = typeof body.verifiedPhotoUrl === 'string' && (body.verifiedPhotoUrl.startsWith('http') || body.verifiedPhotoUrl.startsWith('/uploads/'))
+        ? body.verifiedPhotoUrl
+        : null
+      if (!verifiedPhotoUrl) {
+        return json({ error: 'Owner verification photo required. Upload one photo of the watch with a handwritten note showing your username and today\u2019s date.' }, 400)
+      }
       const database = await getDb()
       const seller = await database.collection('users').findOne({ id: session.uid })
       const listing = {
@@ -311,6 +317,8 @@ async function handler(request, { params }) {
         price,
         currency: (body.currency || 'EUR').toString().slice(0, 6),
         images,
+        verifiedPhotoUrl,
+        isVerifiedPhoto: true,
         boxIncluded: !!body.boxIncluded,
         papersIncluded: !!body.papersIncluded,
         location: (body.location || '').toString().slice(0, 120),
@@ -319,6 +327,17 @@ async function handler(request, { params }) {
         updatedAt: new Date().toISOString(),
       }
       await database.collection('listings').insertOne(listing)
+      try {
+        await database.collection('activity').insertOne({
+          id: uuidv4(),
+          type: 'new_listing',
+          username: listing.sellerUsername,
+          listingId: listing.id,
+          label: `listed “${listing.title}”`,
+          price: listing.price,
+          createdAt: new Date().toISOString(),
+        })
+      } catch {}
       const { _id, ...clean } = listing
       return json({ ok: true, listing: clean })
     }
@@ -355,7 +374,7 @@ async function handler(request, { params }) {
       return json({ ok: true, urls })
     }
 
-    // ----- Shipping estimate -----
+    // ----- Shipping estimate (legacy, distance-based) -----
     if (route === '/shipping/estimate' && method === 'POST') {
       const body = await request.json().catch(() => ({}))
       const from = (body.from || '').toString()
@@ -367,6 +386,89 @@ async function handler(request, { params }) {
       const cost = Math.round(SHIPPING_BASE_FEE + (km / 100) * SHIPPING_RATE_EUR_PER_100KM)
       const days = km < 500 ? '1-2 business days' : km < 2000 ? '2-4 business days' : '4-7 business days'
       return json({ ok: true, distanceKm: km, costEUR: cost, eta: days, from: a.label, to: b.label })
+    }
+
+    // ----- Shipping: secure insured tiers -----
+    if (route === '/shipping/calculate' && method === 'POST') {
+      const body = await request.json().catch(() => ({}))
+      const declaredValue = Number(body.declaredValue) || 0
+      const tiers = [
+        {
+          id: 'standard',
+          name: 'Standard Secure Shipping',
+          insuredUpTo: 1000,
+          priceEUR: 19,
+          eta: '4–6 business days',
+          features: ['Tracked', 'Signature required', 'Insured up to €1,000'],
+          eligible: declaredValue <= 1000 || declaredValue === 0,
+        },
+        {
+          id: 'premium',
+          name: 'Premium Secure Shipping',
+          insuredUpTo: 5000,
+          priceEUR: 39,
+          eta: '2–4 business days',
+          features: ['Tracked', 'Signature required', 'Insured up to €5,000', 'Priority handling'],
+          eligible: declaredValue <= 5000 || declaredValue === 0,
+        },
+        {
+          id: 'express',
+          name: 'Express Secure Shipping',
+          insuredUpTo: 25000,
+          priceEUR: 89,
+          eta: '1–2 business days',
+          features: ['Tracked', 'Signature required', 'Insured up to €25,000', 'Express courier', 'Direct hand-off'],
+          eligible: true,
+        },
+      ]
+      const recommended = declaredValue >= 5001 ? 'express' : declaredValue >= 1001 ? 'premium' : 'standard'
+      return json({ ok: true, tiers, recommended, declaredValue })
+    }
+
+    // ----- Activity (live ticker feed) -----
+    if (route === '/activity' && method === 'GET') {
+      const database = await getDb()
+      let items = await database
+        .collection('activity')
+        .find({}, { projection: { _id: 0 } })
+        .sort({ createdAt: -1 })
+        .limit(25)
+        .toArray()
+      // Seed with demo events so the ticker is never empty on a fresh install
+      if (items.length < 6) {
+        const now = Date.now()
+        const seeds = [
+          { type: 'new_listing', username: 'enzo_genève', label: 'listed an AP × Swatch “Pop Blue”', price: 920, minutesAgo: 2 },
+          { type: 'new_offer', username: 'mila_paris', label: 'offered on “Pop Black”', price: 750, minutesAgo: 7 },
+          { type: 'sold', username: 'tobias_zurich', label: '“Pop Silver” just sold', price: 980, minutesAgo: 14 },
+          { type: 'new_listing', username: 'jules_lyon', label: 'listed an AP × Swatch “Pop White”', price: 890, minutesAgo: 22 },
+          { type: 'new_offer', username: 'sven_berlin', label: 'offered on “Pop Onyx”', price: 1100, minutesAgo: 35 },
+          { type: 'sold', username: 'luca_milano', label: '“Pop Sahara” just sold', price: 1240, minutesAgo: 48 },
+          { type: 'new_listing', username: 'noa_amsterdam', label: 'listed “Pop Forêt” mint condition', price: 950, minutesAgo: 71 },
+          { type: 'new_offer', username: 'arthur_london', label: 'offered on “Pop Glacier”', price: 870, minutesAgo: 95 },
+        ]
+        const synthetic = seeds.map((s) => ({
+          id: uuidv4(),
+          type: s.type,
+          username: s.username,
+          label: s.label,
+          price: s.price,
+          createdAt: new Date(now - s.minutesAgo * 60000).toISOString(),
+          synthetic: true,
+        }))
+        items = [...items, ...synthetic]
+      }
+      return json({ ok: true, items })
+    }
+
+    // ----- Waitlist live count (for landing scarcity copy) -----
+    if (route === '/waitlist/social-proof' && method === 'GET') {
+      const database = await getDb()
+      const realCount = await database.collection('waitlist').countDocuments()
+      // Always show "500+ collectors waiting" minimum for social proof,
+      // then grow with real signups.
+      const displayed = Math.max(500, realCount + 500)
+      return json({ ok: true, displayed, real: realCount })
     }
 
     // ----- Users / Profiles -----
@@ -473,6 +575,19 @@ async function handler(request, { params }) {
         { id },
         { $set: { lastMessage: { type, text: msg.text, price, senderId: session.uid, createdAt: msg.createdAt }, updatedAt: msg.createdAt } }
       )
+      if (type === 'offer') {
+        try {
+          await database.collection('activity').insertOne({
+            id: uuidv4(),
+            type: 'new_offer',
+            username: session.username,
+            listingId: convo.listingId,
+            label: `offered on “${convo.listingTitle}”`,
+            price,
+            createdAt: msg.createdAt,
+          })
+        } catch {}
+      }
       const { _id, ...clean } = msg
       return json({ ok: true, message: clean })
     }
